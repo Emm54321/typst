@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use typst_library::diag::{bail, SourceResult};
 use typst_library::engine::Engine;
-use typst_library::foundations::{Content, Packed, Resolve, StyleChain, StyledElem};
+use typst_library::foundations::{Content, Packed, Resolve, Str, StyleChain, StyledElem};
 use typst_library::introspection::{Locator, SplitLocator};
 use typst_library::layout::{
     Abs, AlignElem, Axes, Axis, Dir, FixedAlignment, Fr, Fragment, Frame, HElem, Point,
@@ -83,6 +85,8 @@ struct StackLayouter<'a> {
     used: GenericSize<Abs>,
     /// The sum of fractions in the current region.
     fr: Fr,
+    //TODO:
+    align_points: HashMap<Str, (Abs, Abs)>,
     /// Already layouted items whose exact positions are not yet known due to
     /// fractional spacing.
     items: Vec<StackItem>,
@@ -126,6 +130,7 @@ impl<'a> StackLayouter<'a> {
             initial: regions.size,
             used: GenericSize::zero(),
             fr: Fr::zero(),
+            align_points: Default::default(),
             items: vec![],
             finished: vec![],
         }
@@ -199,6 +204,16 @@ impl<'a> StackLayouter<'a> {
             self.used.main += generic_size.main;
             self.used.cross.set_max(generic_size.cross);
 
+            for (point, name) in frame.align_points() {
+                let offset = match self.axis {
+                    Axis::X => point.y,
+                    Axis::Y => point.x,
+                };
+                let entry = self.align_points.entry(name.clone()).or_default();
+                entry.0.set_max(offset);
+                entry.1.set_max(generic_size.cross - offset);
+            }
+
             self.items.push(StackItem::Frame(frame, align));
 
             if i + 1 < len {
@@ -211,6 +226,12 @@ impl<'a> StackLayouter<'a> {
 
     /// Advance to the next region.
     fn finish_region(&mut self) -> SourceResult<()> {
+        // Expand if required by align points.
+        let other = self.axis.other();
+        for &(before, after) in self.align_points.values() {
+            self.used.cross.set_max(before + after);
+        }
+
         // Determine the size of the stack in this region depending on whether
         // the region expands.
         let mut size = self
@@ -257,10 +278,25 @@ impl<'a> StackLayouter<'a> {
                         };
 
                     // Align along the cross axis.
-                    let other = self.axis.other();
+                    let mut delta = Abs::zero();
+                    let frame_size = frame.size().get(other);
+                    let mut extra_size = Abs::zero();
+                    for (point, name) in frame.align_points() {
+                        let (before, after) = self.align_points[name];
+                        let offset = match self.axis {
+                            Axis::X => point.y,
+                            Axis::Y => point.x,
+                        };
+                        if !delta.is_zero() || !extra_size.is_zero() {
+                            bail!(self.span, "ambiguous align point");
+                        }
+                        delta = before - offset;
+                        extra_size = before + after - frame_size;
+                    }
                     let cross = align
                         .get(other)
-                        .position(size.get(other) - frame.size().get(other));
+                        .position(size.get(other) - frame_size - extra_size)
+                        + delta;
 
                     let pos = GenericSize::new(cross, main).to_point(self.axis);
                     cursor += child;
@@ -274,6 +310,7 @@ impl<'a> StackLayouter<'a> {
         self.initial = self.regions.size;
         self.used = GenericSize::zero();
         self.fr = Fr::zero();
+        self.align_points.clear();
         self.finished.push(output);
 
         Ok(())
