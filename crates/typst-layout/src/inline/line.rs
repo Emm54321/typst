@@ -1,8 +1,9 @@
 use std::fmt::{self, Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 
+use smallvec::SmallVec;
 use typst_library::engine::Engine;
-use typst_library::foundations::NativeElement;
+use typst_library::foundations::{NativeElement, Str};
 use typst_library::introspection::{SplitLocator, Tag};
 use typst_library::layout::{Abs, Dir, Em, Fr, Frame, FrameItem, Point};
 use typst_library::model::{ParLine, ParLineMarker};
@@ -492,6 +493,7 @@ pub fn commit(
 
     // Build the frames and determine the height and baseline.
     let mut frames = vec![];
+    let mut align_points: SmallVec<[(Abs, Str); 4]> = Default::default();
     for item in line.items.iter() {
         let mut push = |offset: &mut Abs, frame: Frame| {
             let width = frame.width();
@@ -537,6 +539,9 @@ pub fn commit(
                 frames.push((offset, frame));
             }
             Item::Skip(_) => {}
+            Item::AlignPoint(name) => {
+                align_points.push((offset, name.clone()));
+            }
         }
     }
 
@@ -556,6 +561,11 @@ pub fn commit(
         let x = offset + p.align.position(remaining);
         let y = top - frame.baseline();
         output.push_frame(Point::new(x, y), frame);
+    }
+
+    for (offset, name) in align_points {
+        let x = offset + p.align.position(remaining);
+        output.add_align_point(Point::new(x, top), name);
     }
 
     Ok(output)

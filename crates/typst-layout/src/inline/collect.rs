@@ -1,9 +1,9 @@
 use typst_library::diag::bail;
-use typst_library::foundations::{Packed, Resolve};
+use typst_library::foundations::{Packed, Resolve, Str};
 use typst_library::introspection::{SplitLocator, Tag, TagElem};
 use typst_library::layout::{
-    Abs, AlignElem, BoxElem, Dir, Fr, Frame, HElem, InlineElem, InlineItem, Sizing,
-    Spacing,
+    Abs, AlignElem, AlignPointElem, BoxElem, Dir, Fr, Frame, HElem, InlineElem,
+    InlineItem, Sizing, Spacing,
 };
 use typst_library::text::{
     is_default_ignorable, LinebreakElem, SmartQuoteElem, SmartQuoter, SmartQuotes,
@@ -42,6 +42,8 @@ pub enum Item<'a> {
     /// An item that is invisible and needs to be skipped, e.g. a Unicode
     /// isolate.
     Skip(&'static str),
+    /// An alignment point
+    AlignPoint(Str),
 }
 
 impl<'a> Item<'a> {
@@ -70,6 +72,7 @@ impl<'a> Item<'a> {
             Self::Frame(_, _) => OBJ_REPLACE,
             Self::Tag(_) => "",
             Self::Skip(s) => s,
+            Self::AlignPoint(_) => "",
         }
     }
 
@@ -86,6 +89,7 @@ impl<'a> Item<'a> {
             Self::Frame(frame, _) => frame.width(),
             Self::Fractional(_, _) | Self::Tag(_) => Abs::zero(),
             Self::Skip(_) => Abs::zero(),
+            Self::AlignPoint(_) => Abs::zero(),
         }
     }
 }
@@ -228,6 +232,8 @@ pub fn collect<'a>(
             }
         } else if let Some(elem) = child.to_packed::<TagElem>() {
             collector.push_item(Item::Tag(&elem.tag));
+        } else if let Some(elem) = child.to_packed::<AlignPointElem>() {
+            collector.push_item(Item::AlignPoint(elem.name(styles)));
         } else {
             bail!(child.span(), "unexpected paragraph child");
         };

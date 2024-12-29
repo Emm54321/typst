@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 use typst_syntax::Span;
 use typst_utils::{LazyHash, Numeric};
 
-use crate::foundations::{cast, dict, Dict, Label, StyleChain, Value};
+use crate::foundations::{cast, dict, Dict, Label, Str, StyleChain, Value};
 use crate::introspection::{Location, Tag};
 use crate::layout::{
     Abs, Axes, FixedAlignment, HideElem, Length, Point, Size, Transform,
@@ -31,6 +31,7 @@ pub struct Frame {
     ///
     /// Determines whether it is a boundary for gradient drawing.
     kind: FrameKind,
+    align_points: SmallVec<[(Point, Str); 2]>,
 }
 
 /// Constructor, accessors and setters.
@@ -46,6 +47,7 @@ impl Frame {
             baseline: None,
             items: Arc::new(LazyHash::new(vec![])),
             kind,
+            align_points: Default::default(),
         }
     }
 
@@ -139,6 +141,10 @@ impl Frame {
         self.size.y - self.baseline()
     }
 
+    pub fn align_points(&self) -> std::slice::Iter<'_, (Point, Str)> {
+        self.align_points.iter()
+    }
+
     /// An iterator over the items inside this frame alongside their positions
     /// relative to the top-left of the frame.
     pub fn items(&self) -> std::slice::Iter<'_, (Point, FrameItem)> {
@@ -155,7 +161,8 @@ impl Frame {
     }
 
     /// Add an item at a position in the foreground.
-    pub fn push(&mut self, pos: Point, item: FrameItem) {
+    pub fn push(&mut self, pos: Point, mut item: FrameItem) {
+        self.take_item_align_points(pos, &mut item);
         Arc::make_mut(&mut self.items).push((pos, item));
     }
 
@@ -167,15 +174,20 @@ impl Frame {
     where
         I: IntoIterator<Item = (Point, FrameItem)>,
     {
-        Arc::make_mut(&mut self.items).extend(items);
+        //TODO: improve
+        for (pos, frame) in items {
+            self.push(pos, frame);
+        }
+        //Arc::make_mut(&mut self.items).extend(iter);
     }
 
     /// Add a frame at a position in the foreground.
     ///
     /// Automatically decides whether to inline the frame or to include it as a
     /// group based on the number of items in it.
-    pub fn push_frame(&mut self, pos: Point, frame: Frame) {
+    pub fn push_frame(&mut self, pos: Point, mut frame: Frame) {
         if self.should_inline(&frame) {
+            self.take_frame_align_points(pos, &mut frame);
             self.inline(self.layer(), pos, frame);
         } else {
             self.push(pos, FrameItem::Group(GroupItem::new(frame)));
@@ -186,7 +198,8 @@ impl Frame {
     ///
     /// This panics if the layer is greater than the number of layers present.
     #[track_caller]
-    pub fn insert(&mut self, layer: usize, pos: Point, item: FrameItem) {
+    pub fn insert(&mut self, layer: usize, pos: Point, mut item: FrameItem) {
+        self.take_item_align_points(pos, &mut item);
         Arc::make_mut(&mut self.items).insert(layer, (pos, item));
     }
 
@@ -203,7 +216,11 @@ impl Frame {
     where
         I: IntoIterator<Item = (Point, FrameItem)>,
     {
-        Arc::make_mut(&mut self.items).splice(0..0, items);
+        //TODO: improve
+        for (k, (pos, item)) in items.into_iter().enumerate() {
+            self.insert(k, pos, item);
+        }
+        //Arc::make_mut(&mut self.items).splice(0..0, items);
     }
 
     /// Add a frame at a position in the background.
@@ -213,6 +230,10 @@ impl Frame {
         } else {
             self.prepend(pos, FrameItem::Group(GroupItem::new(frame)));
         }
+    }
+
+    pub fn add_align_point(&mut self, pos: Point, name: Str) {
+        self.align_points.push((pos, name));
     }
 
     /// Whether the given frame should be inlined.
@@ -265,6 +286,24 @@ impl Frame {
             }
         }
     }
+
+    fn take_frame_align_points(&mut self, point: Point, frame: &mut Frame) {
+        self.align_points
+            .extend(frame.align_points.drain(..).map(|(pos, name)| (point + pos, name)));
+    }
+
+    fn take_item_align_points(&mut self, point: Point, item: &mut FrameItem) {
+        match item {
+            FrameItem::Group(item) => {
+                self.take_frame_align_points(point, &mut item.frame);
+            }
+            FrameItem::Text(..)
+            | FrameItem::Shape(..)
+            | FrameItem::Image(..)
+            | FrameItem::Link(..)
+            | FrameItem::Tag(..) => (),
+        }
+    }
 }
 
 /// Modify the frame.
@@ -276,6 +315,7 @@ impl Frame {
         } else {
             self.items = Arc::new(LazyHash::new(vec![]));
         }
+        self.align_points.clear();
     }
 
     /// Adjust the frame's size, translate the original content by an offset
@@ -299,6 +339,9 @@ impl Frame {
                 *baseline += offset.y;
             }
             for (point, _) in Arc::make_mut(&mut self.items).iter_mut() {
+                *point += offset;
+            }
+            for (point, _) in &mut self.align_points {
                 *point += offset;
             }
         }
