@@ -1,7 +1,7 @@
+use std::collections::HashMap;
 use std::fmt::{self, Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 
-use smallvec::SmallVec;
 use typst_library::engine::Engine;
 use typst_library::foundations::{NativeElement, Str};
 use typst_library::introspection::{SplitLocator, Tag};
@@ -11,6 +11,7 @@ use typst_library::text::{Lang, TextElem};
 use typst_utils::Numeric;
 
 use super::*;
+use crate::AlignPointsHandler;
 
 const SHY: char = '\u{ad}';
 const HYPHEN: char = '-';
@@ -488,18 +489,13 @@ pub fn commit(
         }
     }
 
-    let mut top = Abs::zero();
-    let mut bottom = Abs::zero();
-
     // Build the frames and determine the height and baseline.
     let mut frames = vec![];
-    let mut align_points: SmallVec<[(Abs, Str); 4]> = Default::default();
+    let mut align_points: HashMap<Str, Abs> = Default::default();
     for item in line.items.iter() {
         let mut push = |offset: &mut Abs, frame: Frame| {
             let width = frame.width();
-            top.set_max(frame.baseline());
-            bottom.set_max(frame.size().y - frame.baseline());
-            frames.push((*offset, frame));
+            frames.push((Point::new(*offset, -frame.baseline()), frame));
             *offset += width;
         };
 
@@ -536,11 +532,11 @@ pub fn commit(
             Item::Tag(tag) => {
                 let mut frame = Frame::soft(Size::zero());
                 frame.push(Point::zero(), FrameItem::Tag((*tag).clone()));
-                frames.push((offset, frame));
+                frames.push((Point::with_x(offset), frame));
             }
             Item::Skip(_) => {}
             Item::AlignPoint(name) => {
-                align_points.push((offset, name.clone()));
+                align_points.insert(name.clone(), offset);
             }
         }
     }
@@ -550,6 +546,37 @@ pub fn commit(
         remaining = Abs::zero();
     }
 
+    // Handle vertical alignment.
+    let mut align_points_handler = AlignPointsHandler::new();
+    for (name, _offset) in &align_points {
+        align_points_handler.add_positioned_point(name.clone(), Abs::zero());
+    }
+    align_points_handler.compute_deltas(frames.iter().filter_map(|(_, frame)| {
+        if frame.has_align_points() {
+            Some(
+                frame
+                    .align_points()
+                    .map(|(point, name)| (name.clone(), point.y - frame.baseline())),
+            )
+        } else {
+            None
+        }
+    }));
+    align_points_handler.adjust_positions(frames.iter_mut().map(|(pos, frame)| {
+        (
+            &mut pos.y,
+            frame
+                .align_points()
+                .map(|(point, name)| (name.clone(), point.y - frame.baseline())),
+        )
+    }));
+    let mut top = Abs::zero();
+    let mut bottom = Abs::zero();
+    for (point, frame) in &frames {
+        top.set_max(-point.y);
+        bottom.set_max(frame.size().y + point.y);
+    }
+
     let size = Size::new(width, top + bottom);
     let mut output = Frame::soft(size);
     output.set_baseline(top);
@@ -557,13 +584,14 @@ pub fn commit(
     add_par_line_marker(&mut output, styles, engine, locator, top);
 
     // Construct the line's frame.
-    for (offset, frame) in frames {
-        let x = offset + p.align.position(remaining);
-        let y = top - frame.baseline();
+    for (point, frame) in frames {
+        let x = point.x + p.align.position(remaining);
+        let y = top + point.y;
         output.push_frame(Point::new(x, y), frame);
     }
 
-    for (offset, name) in align_points {
+    // Set the line align points.
+    for (name, offset) in align_points {
         let x = offset + p.align.position(remaining);
         output.add_align_point(Point::new(x, top), name);
     }

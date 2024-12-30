@@ -1,5 +1,6 @@
 //! Typst's layout engine.
 
+mod align_points;
 mod flow;
 mod grid;
 mod image;
@@ -12,6 +13,8 @@ mod repeat;
 mod shapes;
 mod stack;
 mod transforms;
+
+use align_points::AlignPointsHandler;
 
 pub use self::flow::{layout_columns, layout_fragment, layout_frame};
 pub use self::grid::{layout_grid, layout_table};
