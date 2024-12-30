@@ -141,6 +141,10 @@ impl Frame {
         self.size.y - self.baseline()
     }
 
+    pub fn has_align_points(&self) -> bool {
+        !self.align_points.is_empty()
+    }
+
     pub fn align_points(&self) -> std::slice::Iter<'_, (Point, Str)> {
         self.align_points.iter()
     }
