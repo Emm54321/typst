@@ -11,7 +11,7 @@ use typst_library::text::{Lang, TextElem};
 use typst_utils::Numeric;
 
 use super::*;
-use crate::AlignPointsHandler;
+use crate::AlignPointsEngine;
 
 const SHY: char = '\u{ad}';
 const HYPHEN: char = '-';
@@ -547,22 +547,30 @@ pub fn commit(
     }
 
     // Handle vertical alignment.
-    let mut align_points_handler = AlignPointsHandler::new();
+    let mut align_points_engine = AlignPointsEngine::new();
     for (name, _offset) in &align_points {
-        align_points_handler.add_positioned_point(name.clone(), Abs::zero());
+        align_points_engine.add_positioned_point(
+            name.clone(),
+            Abs::zero(),
+            Abs::zero(),
+            Abs::zero(),
+        );
     }
-    align_points_handler.compute_deltas(frames.iter().filter_map(|(_, frame)| {
+    align_points_engine.compute_positions(frames.iter().filter_map(|(_, frame)| {
         if frame.has_align_points() {
-            Some(
-                frame
-                    .align_points()
-                    .map(|(point, name)| (name.clone(), point.y - frame.baseline())),
-            )
+            Some(frame.align_points().map(|(point, name)| {
+                (
+                    name.clone(),
+                    point.y - frame.baseline(),
+                    frame.baseline(),
+                    frame.size().y - frame.baseline(),
+                )
+            }))
         } else {
             None
         }
     }));
-    align_points_handler.adjust_positions(frames.iter_mut().map(|(pos, frame)| {
+    align_points_engine.adjust_positions(frames.iter_mut().map(|(pos, frame)| {
         (
             &mut pos.y,
             frame

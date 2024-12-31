@@ -14,7 +14,7 @@ mod shapes;
 mod stack;
 mod transforms;
 
-use align_points::AlignPointsHandler;
+use align_points::AlignPointsEngine;
 
 pub use self::flow::{layout_columns, layout_fragment, layout_frame};
 pub use self::grid::{layout_grid, layout_table};
