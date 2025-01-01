@@ -1,18 +1,17 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use typst_library::foundations::Str;
-use typst_library::layout::Abs;
+use typst_library::layout::{Abs, AlignPointId};
 
 #[derive(Debug, Default)]
 pub struct AlignPointsEngine {
-    positioned_points: HashMap<Str, PointInfo>,
+    positioned_points: HashMap<AlignPointId, PointInfo>,
 }
 
 #[derive(Debug)]
 enum PointInfo {
     Parent { position: Abs, before: Abs, after: Abs },
-    Child { parent: Str, offset: Abs },
+    Child { parent: AlignPointId, offset: Abs },
 }
 
 impl AlignPointsEngine {
@@ -22,20 +21,22 @@ impl AlignPointsEngine {
 
     pub fn add_positioned_point(
         &mut self,
-        name: Str,
+        id: AlignPointId,
         position: Abs,
         before: Abs,
         after: Abs,
     ) {
         self.positioned_points
-            .insert(name, PointInfo::Parent { position, before, after });
+            .insert(id, PointInfo::Parent { position, before, after });
     }
 
     pub fn compute_positions(
         &mut self,
-        groups: impl IntoIterator<Item = impl IntoIterator<Item = (Str, Abs, Abs, Abs)>>,
+        groups: impl IntoIterator<
+            Item = impl IntoIterator<Item = (AlignPointId, Abs, Abs, Abs)>,
+        >,
     ) {
-        let mut remaining: Vec<Vec<(Str, Abs, Abs, Abs)>> = Default::default();
+        let mut remaining: Vec<Vec<(AlignPointId, Abs, Abs, Abs)>> = Default::default();
         for align_points in groups {
             remaining.push(align_points.into_iter().collect::<Vec<_>>());
         }
@@ -44,10 +45,10 @@ impl AlignPointsEngine {
             let mut changed = false;
             let mut k = 0;
             while k < remaining.len() {
-                let align_points: &[(Str, Abs, Abs, Abs)] = &remaining[k];
+                let align_points: &[(AlignPointId, Abs, Abs, Abs)] = &remaining[k];
                 let mut found = None;
-                for &(ref name, position, _before, _after) in align_points {
-                    if let Some((parent, offset)) = self.get_parent(name) {
+                for &(ref id, position, _before, _after) in align_points {
+                    if let Some((parent, offset)) = self.get_parent(id) {
                         found =
                             Some((parent, offset, position, remaining.swap_remove(k)));
                         //println!("found {found:?}");
@@ -68,8 +69,8 @@ impl AlignPointsEngine {
                         self.get_position(&parent).unwrap();
                     //println!("new_parent_position {new_parent_position:?} max_before {max_before:?} max_after {max_after:?}");
                     //let new_ref_position = new_parent_position + parent_to_ref_offset;
-                    for (name, old_position, before, after) in align_points {
-                        //println!("set {name}: {old_position:?} {before:?} {after:?}");
+                    for (id, old_position, before, after) in align_points {
+                        //println!("set {id}: {old_position:?} {before:?} {after:?}");
                         let offset =
                             old_position - old_ref_position + parent_to_ref_offset;
                         //println!(
@@ -79,7 +80,7 @@ impl AlignPointsEngine {
                         //);
                         max_before.set_max(before - offset);
                         max_after.set_max(after + offset);
-                        if let Entry::Vacant(e) = self.positioned_points.entry(name) {
+                        if let Entry::Vacant(e) = self.positioned_points.entry(id) {
                             e.insert(PointInfo::Child { parent: parent.clone(), offset });
                         }
                     }
@@ -95,11 +96,10 @@ impl AlignPointsEngine {
             }
             if !changed {
                 if let Some(align_points) = remaining.first() {
-                    if let Some(&(ref name, position, before, after)) =
-                        align_points.first()
+                    if let Some(&(ref id, position, before, after)) = align_points.first()
                     {
-                        //println!("set position for {name} to {position:?}");
-                        self.add_positioned_point(name.clone(), position, before, after);
+                        //println!("set position for {id} to {position:?}");
+                        self.add_positioned_point(id.clone(), position, before, after);
                     }
                 } else {
                     break;
@@ -112,7 +112,7 @@ impl AlignPointsEngine {
         //println!("before clip: {self:?}");
         for (_name, info) in &mut self.positioned_points.iter_mut() {
             if let PointInfo::Parent { position, before, .. } = info {
-                //println!("clip {name} {:?} {:?}", position, before);
+                //println!("clip {id} {:?} {:?}", position, before);
                 if *before > *position {
                     //println!("adjust");
                     *position = *before;
@@ -122,15 +122,15 @@ impl AlignPointsEngine {
         //println!("after clip: {self:?}");
     }
 
-    fn get_parent(&self, name: &Str) -> Option<(Str, Abs)> {
-        self.positioned_points.get(name).map(|info| match info {
-            PointInfo::Parent { .. } => (name.clone(), Abs::zero()),
+    fn get_parent(&self, id: &AlignPointId) -> Option<(AlignPointId, Abs)> {
+        self.positioned_points.get(id).map(|info| match info {
+            PointInfo::Parent { .. } => (id.clone(), Abs::zero()),
             PointInfo::Child { parent, offset } => (parent.clone(), *offset),
         })
     }
 
-    pub fn get_position(&self, name: &Str) -> Option<(Abs, Abs, Abs)> {
-        self.positioned_points.get(name).map(|info| match info {
+    pub fn get_position(&self, id: &AlignPointId) -> Option<(Abs, Abs, Abs)> {
+        self.positioned_points.get(id).map(|info| match info {
             &PointInfo::Parent { position, before, after } => (position, before, after),
             &PointInfo::Child { ref parent, offset } => {
                 let (position, before, after) = self.get_position(parent).unwrap();
@@ -146,8 +146,8 @@ impl AlignPointsEngine {
         })
     }
 
-    pub fn get_group_size(&self, name: &Str) -> Option<Abs> {
-        self.get_parent(name).and_then(|(parent, _offset)| {
+    pub fn get_group_size(&self, id: &AlignPointId) -> Option<Abs> {
+        self.get_parent(id).and_then(|(parent, _offset)| {
             if let &PointInfo::Parent { before, after, .. } =
                 &self.positioned_points[&parent]
             {
@@ -160,9 +160,9 @@ impl AlignPointsEngine {
 
     fn get_group_size_mut(
         &mut self,
-        name: &Str,
+        id: &AlignPointId,
     ) -> Option<(&mut Abs, &mut Abs, &mut Abs)> {
-        self.get_parent(name).and_then(|(parent, _offset)| {
+        self.get_parent(id).and_then(|(parent, _offset)| {
             if let Some(PointInfo::Parent { position, before, after }) =
                 self.positioned_points.get_mut(&parent)
             {
@@ -175,11 +175,13 @@ impl AlignPointsEngine {
 
     pub fn adjust_positions<'a>(
         &mut self,
-        groups: impl IntoIterator<Item = (&'a mut Abs, impl IntoIterator<Item = (Str, Abs)>)>,
+        groups: impl IntoIterator<
+            Item = (&'a mut Abs, impl IntoIterator<Item = (AlignPointId, Abs)>),
+        >,
     ) {
         for (position, align_points) in groups {
-            for (name, pos) in align_points {
-                if let Some((position1, ..)) = self.get_position(&name) {
+            for (id, pos) in align_points {
+                if let Some((position1, ..)) = self.get_position(&id) {
                     *position += position1 - pos;
                     break;
                 }

@@ -218,12 +218,12 @@ impl<'a> StackLayouter<'a> {
         align_points_engine.compute_positions(self.items.iter().filter_map(|item| {
             if let StackItem::Frame(frame, _align) = item {
                 if frame.has_align_points() {
-                    Some(frame.align_points().map(|(point, name)| {
+                    Some(frame.align_points().map(|(point, id)| {
                         let (offset, size) = match self.axis {
-                            Axis::X => (point.y, frame.size().y),
-                            Axis::Y => (point.x, frame.size().x),
+                            Axis::X => (point.y, frame.height()),
+                            Axis::Y => (point.x, frame.width()),
                         };
-                        (name.clone(), offset, offset, size - offset)
+                        (id.clone(), offset, offset, size - offset)
                     }))
                 } else {
                     None
@@ -289,16 +289,16 @@ impl<'a> StackLayouter<'a> {
                     let mut delta = Abs::zero();
                     let frame_size = frame.size().get(other);
                     let mut extra_size = Abs::zero();
-                    if let Some((point, name)) = frame.align_points().next() {
+                    if let Some((point, id)) = frame.align_points().next() {
                         let offset = match self.axis {
                             Axis::X => point.y,
                             Axis::Y => point.x,
                         };
                         let (position, ..) =
-                            align_points_engine.get_position(name).unwrap();
+                            align_points_engine.get_position(id).unwrap();
                         delta = position - offset;
-                        extra_size = align_points_engine.get_group_size(name).unwrap()
-                            - frame_size;
+                        extra_size =
+                            align_points_engine.get_group_size(id).unwrap() - frame_size;
                     }
                     let cross = align
                         .get(other)

@@ -3,9 +3,9 @@ use std::fmt::{self, Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 
 use typst_library::engine::Engine;
-use typst_library::foundations::{NativeElement, Str};
+use typst_library::foundations::NativeElement;
 use typst_library::introspection::{SplitLocator, Tag};
-use typst_library::layout::{Abs, Dir, Em, Fr, Frame, FrameItem, Point};
+use typst_library::layout::{Abs, AlignPointId, Dir, Em, Fr, Frame, FrameItem, Point};
 use typst_library::model::{ParLine, ParLineMarker};
 use typst_library::text::{Lang, TextElem};
 use typst_utils::Numeric;
@@ -491,7 +491,7 @@ pub fn commit(
 
     // Build the frames and determine the height and baseline.
     let mut frames = vec![];
-    let mut align_points: HashMap<Str, Abs> = Default::default();
+    let mut align_points: HashMap<AlignPointId, Abs> = Default::default();
     for item in line.items.iter() {
         let mut push = |offset: &mut Abs, frame: Frame| {
             let width = frame.width();
@@ -536,7 +536,7 @@ pub fn commit(
             }
             Item::Skip(_) => {}
             Item::AlignPoint(name) => {
-                align_points.insert(name.clone(), offset);
+                align_points.insert(name.into(), offset);
             }
         }
     }
@@ -548,9 +548,9 @@ pub fn commit(
 
     // Handle vertical alignment.
     let mut align_points_engine = AlignPointsEngine::new();
-    for (name, _offset) in &align_points {
+    for (id, _offset) in &align_points {
         align_points_engine.add_positioned_point(
-            name.clone(),
+            id.clone(),
             Abs::zero(),
             Abs::zero(),
             Abs::zero(),
@@ -558,12 +558,12 @@ pub fn commit(
     }
     align_points_engine.compute_positions(frames.iter().filter_map(|(_, frame)| {
         if frame.has_align_points() {
-            Some(frame.align_points().map(|(point, name)| {
+            Some(frame.align_points().map(|(point, id)| {
                 (
-                    name.clone(),
+                    id.clone(),
                     point.y - frame.baseline(),
                     frame.baseline(),
-                    frame.size().y - frame.baseline(),
+                    frame.height() - frame.baseline(),
                 )
             }))
         } else {
@@ -575,14 +575,14 @@ pub fn commit(
             &mut pos.y,
             frame
                 .align_points()
-                .map(|(point, name)| (name.clone(), point.y - frame.baseline())),
+                .map(|(point, id)| (id.clone(), point.y - frame.baseline())),
         )
     }));
     let mut top = Abs::zero();
     let mut bottom = Abs::zero();
     for (point, frame) in &frames {
         top.set_max(-point.y);
-        bottom.set_max(frame.size().y + point.y);
+        bottom.set_max(frame.height() + point.y);
     }
 
     let size = Size::new(width, top + bottom);

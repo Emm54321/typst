@@ -8,10 +8,10 @@ use smallvec::SmallVec;
 use typst_syntax::Span;
 use typst_utils::{LazyHash, Numeric};
 
-use crate::foundations::{cast, dict, Dict, Label, Str, StyleChain, Value};
+use crate::foundations::{cast, dict, Dict, Label, StyleChain, Value};
 use crate::introspection::{Location, Tag};
 use crate::layout::{
-    Abs, Axes, FixedAlignment, HideElem, Length, Point, Size, Transform,
+    Abs, AlignPointId, Axes, FixedAlignment, HideElem, Length, Point, Size, Transform,
 };
 use crate::model::{Destination, LinkElem};
 use crate::text::TextItem;
@@ -31,7 +31,7 @@ pub struct Frame {
     ///
     /// Determines whether it is a boundary for gradient drawing.
     kind: FrameKind,
-    align_points: SmallVec<[(Point, Str); 2]>,
+    align_points: SmallVec<[(Point, AlignPointId); 2]>,
 }
 
 /// Constructor, accessors and setters.
@@ -145,7 +145,7 @@ impl Frame {
         !self.align_points.is_empty()
     }
 
-    pub fn align_points(&self) -> std::slice::Iter<'_, (Point, Str)> {
+    pub fn align_points(&self) -> std::slice::Iter<'_, (Point, AlignPointId)> {
         self.align_points.iter()
     }
 
@@ -236,8 +236,8 @@ impl Frame {
         }
     }
 
-    pub fn add_align_point(&mut self, pos: Point, name: Str) {
-        self.align_points.push((pos, name));
+    pub fn add_align_point(&mut self, pos: Point, id: AlignPointId) {
+        self.align_points.push((pos, id));
     }
 
     /// Whether the given frame should be inlined.
@@ -293,7 +293,7 @@ impl Frame {
 
     fn take_frame_align_points(&mut self, point: Point, frame: &mut Frame) {
         self.align_points
-            .extend(frame.align_points.drain(..).map(|(pos, name)| (point + pos, name)));
+            .extend(frame.align_points.drain(..).map(|(pos, id)| (point + pos, id)));
     }
 
     fn take_item_align_points(&mut self, point: Point, item: &mut FrameItem) {
