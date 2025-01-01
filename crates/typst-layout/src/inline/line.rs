@@ -491,7 +491,7 @@ pub fn commit(
 
     // Build the frames and determine the height and baseline.
     let mut frames = vec![];
-    let mut align_points: HashMap<AlignPointId, Abs> = Default::default();
+    let mut align_points: HashMap<AlignPointId, (Abs, bool, bool)> = Default::default();
     for item in line.items.iter() {
         let mut push = |offset: &mut Abs, frame: Frame| {
             let width = frame.width();
@@ -535,8 +535,8 @@ pub fn commit(
                 frames.push((Point::with_x(offset), frame));
             }
             Item::Skip(_) => {}
-            Item::AlignPoint(name) => {
-                align_points.insert(name.into(), offset);
+            Item::AlignPoint(name, horizontal, vertical) => {
+                align_points.insert(name.into(), (offset, *horizontal, *vertical));
             }
         }
     }
@@ -548,34 +548,41 @@ pub fn commit(
 
     // Handle vertical alignment.
     let mut align_points_engine = AlignPointsEngine::new();
-    for (id, _offset) in &align_points {
-        align_points_engine.add_positioned_point(
-            id.clone(),
-            Abs::zero(),
-            Abs::zero(),
-            Abs::zero(),
-        );
-    }
-    align_points_engine.compute_positions(frames.iter().filter_map(|(_, frame)| {
-        if frame.has_align_points() {
-            Some(frame.align_points().map(|(point, id)| {
-                (
-                    id.clone(),
-                    point.y - frame.baseline(),
-                    frame.baseline(),
-                    frame.height() - frame.baseline(),
-                )
-            }))
-        } else {
-            None
+    for (id, (_offset, _horizontal, vertical)) in &align_points {
+        if *vertical {
+            align_points_engine.add_positioned_point(
+                id.clone(),
+                Abs::zero(),
+                Abs::zero(),
+                Abs::zero(),
+            );
         }
-    }));
+    }
+    for (_, frame) in &frames {
+        if frame.has_align_points() {
+            align_points_engine.add_group(frame.align_points().filter_map(
+                |(point, id, _horizontal, vertical)| {
+                    if *vertical {
+                        Some((
+                            id.clone(),
+                            point.y - frame.baseline(),
+                            frame.baseline(),
+                            frame.height() - frame.baseline(),
+                        ))
+                    } else {
+                        None
+                    }
+                },
+            ));
+        }
+    }
+    align_points_engine.compute_positions();
     align_points_engine.adjust_positions(frames.iter_mut().map(|(pos, frame)| {
         (
             &mut pos.y,
-            frame
-                .align_points()
-                .map(|(point, id)| (id.clone(), point.y - frame.baseline())),
+            frame.align_points().map(|(point, id, _horizontal, _vertical)| {
+                (id.clone(), point.y - frame.baseline())
+            }),
         )
     }));
     let mut top = Abs::zero();
@@ -599,9 +606,9 @@ pub fn commit(
     }
 
     // Set the line align points.
-    for (name, offset) in align_points {
+    for (name, (offset, horizontal, vertical)) in align_points {
         let x = offset + p.align.position(remaining);
-        output.add_align_point(Point::new(x, top), name);
+        output.add_align_point(Point::new(x, top), name, horizontal, vertical);
     }
 
     Ok(output)

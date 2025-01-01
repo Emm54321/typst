@@ -31,7 +31,7 @@ pub struct Frame {
     ///
     /// Determines whether it is a boundary for gradient drawing.
     kind: FrameKind,
-    align_points: SmallVec<[(Point, AlignPointId); 2]>,
+    align_points: SmallVec<[(Point, AlignPointId, bool, bool); 2]>,
 }
 
 /// Constructor, accessors and setters.
@@ -145,7 +145,9 @@ impl Frame {
         !self.align_points.is_empty()
     }
 
-    pub fn align_points(&self) -> std::slice::Iter<'_, (Point, AlignPointId)> {
+    pub fn align_points(
+        &self,
+    ) -> std::slice::Iter<'_, (Point, AlignPointId, bool, bool)> {
         self.align_points.iter()
     }
 
@@ -236,8 +238,14 @@ impl Frame {
         }
     }
 
-    pub fn add_align_point(&mut self, pos: Point, id: AlignPointId) {
-        self.align_points.push((pos, id));
+    pub fn add_align_point(
+        &mut self,
+        pos: Point,
+        id: AlignPointId,
+        horizontal: bool,
+        vertical: bool,
+    ) {
+        self.align_points.push((pos, id, horizontal, vertical));
     }
 
     /// Whether the given frame should be inlined.
@@ -292,8 +300,9 @@ impl Frame {
     }
 
     fn take_frame_align_points(&mut self, point: Point, frame: &mut Frame) {
-        self.align_points
-            .extend(frame.align_points.drain(..).map(|(pos, id)| (point + pos, id)));
+        self.align_points.extend(frame.align_points.drain(..).map(
+            |(pos, id, horizontal, vertical)| (point + pos, id, horizontal, vertical),
+        ));
     }
 
     fn take_item_align_points(&mut self, point: Point, item: &mut FrameItem) {
@@ -345,7 +354,7 @@ impl Frame {
             for (point, _) in Arc::make_mut(&mut self.items).iter_mut() {
                 *point += offset;
             }
-            for (point, _) in &mut self.align_points {
+            for (point, ..) in &mut self.align_points {
                 *point += offset;
             }
         }

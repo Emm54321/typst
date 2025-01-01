@@ -1,9 +1,11 @@
+mod cell_infos;
 mod cells;
 mod layouter;
 mod lines;
 mod repeated;
 mod rowspans;
 
+pub use self::cell_infos::{CellInfos, GridInfos};
 pub use self::cells::{Cell, CellGrid};
 pub use self::layouter::GridLayouter;
 

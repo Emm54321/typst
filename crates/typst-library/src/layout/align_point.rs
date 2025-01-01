@@ -12,11 +12,16 @@ impl From<&Str> for AlignPointId {
 }
 
 // Possible parameters:
-// - horizontal/vertical to use only in one direction
 // - priority
 // - some kind of scope
 #[elem]
 pub struct AlignPointElem {
     #[positional]
     pub name: Str,
+
+    #[default(true)]
+    pub horizontal: bool,
+
+    #[default(true)]
+    pub vertical: bool,
 }

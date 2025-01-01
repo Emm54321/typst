@@ -215,23 +215,26 @@ impl<'a> StackLayouter<'a> {
     fn finish_region(&mut self) -> SourceResult<()> {
         // Compute align points positions.
         let mut align_points_engine = AlignPointsEngine::new();
-        align_points_engine.compute_positions(self.items.iter().filter_map(|item| {
+        for item in &self.items {
             if let StackItem::Frame(frame, _align) = item {
                 if frame.has_align_points() {
-                    Some(frame.align_points().map(|(point, id)| {
-                        let (offset, size) = match self.axis {
-                            Axis::X => (point.y, frame.height()),
-                            Axis::Y => (point.x, frame.width()),
-                        };
-                        (id.clone(), offset, offset, size - offset)
-                    }))
-                } else {
-                    None
+                    align_points_engine.add_group(frame.align_points().filter_map(
+                        |(point, id, horizontal, vertical)| {
+                            let (offset, size, usable) = match self.axis {
+                                Axis::X => (point.y, frame.height(), *vertical),
+                                Axis::Y => (point.x, frame.width(), *horizontal),
+                            };
+                            if usable {
+                                Some((id.clone(), offset, offset, size - offset))
+                            } else {
+                                None
+                            }
+                        },
+                    ))
                 }
-            } else {
-                None
             }
-        }));
+        }
+        align_points_engine.compute_positions();
         align_points_engine.clip_positions();
 
         // Expand the cross size if required by align points.
@@ -289,16 +292,19 @@ impl<'a> StackLayouter<'a> {
                     let mut delta = Abs::zero();
                     let frame_size = frame.size().get(other);
                     let mut extra_size = Abs::zero();
-                    if let Some((point, id)) = frame.align_points().next() {
-                        let offset = match self.axis {
-                            Axis::X => point.y,
-                            Axis::Y => point.x,
+                    for (point, id, horizontal, vertical) in frame.align_points() {
+                        let (usable, offset) = match self.axis {
+                            Axis::X => (*vertical, point.y),
+                            Axis::Y => (*horizontal, point.x),
                         };
-                        let (position, ..) =
-                            align_points_engine.get_position(id).unwrap();
-                        delta = position - offset;
-                        extra_size =
-                            align_points_engine.get_group_size(id).unwrap() - frame_size;
+                        if usable {
+                            let (position, ..) =
+                                align_points_engine.get_position(id).unwrap();
+                            delta = position - offset;
+                            extra_size = align_points_engine.get_group_size(id).unwrap()
+                                - frame_size;
+                            break;
+                        }
                     }
                     let cross = align
                         .get(other)

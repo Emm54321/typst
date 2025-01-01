@@ -6,6 +6,7 @@ use typst_library::layout::{Abs, AlignPointId};
 #[derive(Debug, Default)]
 pub struct AlignPointsEngine {
     positioned_points: HashMap<AlignPointId, PointInfo>,
+    remaining: Vec<Vec<(AlignPointId, Abs, Abs, Abs)>>,
 }
 
 #[derive(Debug)]
@@ -19,6 +20,11 @@ impl AlignPointsEngine {
         Default::default()
     }
 
+    pub fn clear(&mut self) {
+        self.positioned_points.clear();
+        self.remaining.clear();
+    }
+
     pub fn add_positioned_point(
         &mut self,
         id: AlignPointId,
@@ -30,27 +36,31 @@ impl AlignPointsEngine {
             .insert(id, PointInfo::Parent { position, before, after });
     }
 
-    pub fn compute_positions(
+    /// Add a group of align points.
+    /// Each align point has an id, a position, and need space before and after the position.
+    pub fn add_group(
         &mut self,
-        groups: impl IntoIterator<
-            Item = impl IntoIterator<Item = (AlignPointId, Abs, Abs, Abs)>,
-        >,
+        group: impl IntoIterator<Item = (AlignPointId, Abs, Abs, Abs)>,
     ) {
-        let mut remaining: Vec<Vec<(AlignPointId, Abs, Abs, Abs)>> = Default::default();
-        for align_points in groups {
-            remaining.push(align_points.into_iter().collect::<Vec<_>>());
-        }
-        //println!("compute {remaining:?}");
+        self.remaining.push(group.into_iter().collect::<Vec<_>>());
+    }
+
+    pub fn compute_positions(&mut self) {
+        //println!("compute {:?}", self.remaining);
         loop {
             let mut changed = false;
             let mut k = 0;
-            while k < remaining.len() {
-                let align_points: &[(AlignPointId, Abs, Abs, Abs)] = &remaining[k];
+            while k < self.remaining.len() {
+                let align_points: &[(AlignPointId, Abs, Abs, Abs)] = &self.remaining[k];
                 let mut found = None;
                 for &(ref id, position, _before, _after) in align_points {
                     if let Some((parent, offset)) = self.get_parent(id) {
-                        found =
-                            Some((parent, offset, position, remaining.swap_remove(k)));
+                        found = Some((
+                            parent,
+                            offset,
+                            position,
+                            self.remaining.swap_remove(k),
+                        ));
                         //println!("found {found:?}");
                         break;
                     }
@@ -62,7 +72,7 @@ impl AlignPointsEngine {
                     align_points,
                 )) = found
                 {
-                    //println!("parent {parent} parent_to_ref_offset {parent_to_ref_offset:?} old_ref_position {old_ref_position:?}");
+                    //println!("parent {parent:?} parent_to_ref_offset {parent_to_ref_offset:?} old_ref_position {old_ref_position:?}");
                     //println!("align_points {align_points:?}");
                     //TODO: error if there are conflicting align points.
                     let (_new_parent_position, mut max_before, mut max_after) =
@@ -70,13 +80,13 @@ impl AlignPointsEngine {
                     //println!("new_parent_position {new_parent_position:?} max_before {max_before:?} max_after {max_after:?}");
                     //let new_ref_position = new_parent_position + parent_to_ref_offset;
                     for (id, old_position, before, after) in align_points {
-                        //println!("set {id}: {old_position:?} {before:?} {after:?}");
+                        //println!("set {id:?}: {old_position:?} {before:?} {after:?}");
                         let offset =
                             old_position - old_ref_position + parent_to_ref_offset;
                         //println!(
                         //    "offset {offset:?} before {:?} after {:?}",
-                        //    before + offset,
-                        //    after - offset
+                        //    before - offset,
+                        //    after + offset
                         //);
                         max_before.set_max(before - offset);
                         max_after.set_max(after + offset);
@@ -95,11 +105,13 @@ impl AlignPointsEngine {
                 }
             }
             if !changed {
-                if let Some(align_points) = remaining.first() {
+                if let Some(align_points) = self.remaining.first() {
                     if let Some(&(ref id, position, before, after)) = align_points.first()
                     {
-                        //println!("set position for {id} to {position:?}");
+                        //println!("set position for {id:?} to {position:?}");
                         self.add_positioned_point(id.clone(), position, before, after);
+                    } else {
+                        break;
                     }
                 } else {
                     break;
@@ -110,9 +122,9 @@ impl AlignPointsEngine {
 
     pub fn clip_positions(&mut self) {
         //println!("before clip: {self:?}");
-        for (_name, info) in &mut self.positioned_points.iter_mut() {
+        for (_id, info) in &mut self.positioned_points.iter_mut() {
             if let PointInfo::Parent { position, before, .. } = info {
-                //println!("clip {id} {:?} {:?}", position, before);
+                //println!("clip {id:?} {:?} {:?}", position, before);
                 if *before > *position {
                     //println!("adjust");
                     *position = *before;
