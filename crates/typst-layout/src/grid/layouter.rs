@@ -1329,8 +1329,9 @@ impl<'a> GridLayouter<'a> {
             bail!(self.span, "cannot create grid with infinite height");
         }
 
-        let mut output = Frame::soft(Size::new(self.width, height));
         let mut pos = Point::zero();
+        let mut vertical_align_engine = AlignPointsEngine::new();
+        let mut frames = Vec::with_capacity(self.rcols.len());
 
         // Reverse the column order when using RTL.
         for (x, &rcol) in self.rcols.iter().enumerate().rev_if(self.is_rtl) {
@@ -1358,6 +1359,22 @@ impl<'a> GridLayouter<'a> {
                         pod,
                     )?;
                     let frame = fragment.into_frame();
+                    if frame.has_align_points() {
+                        vertical_align_engine.add_group(frame.align_points().filter_map(
+                            |(point, id, _horizontal, vertical)| {
+                                if *vertical {
+                                    Some((
+                                        id.clone(),
+                                        point.y,
+                                        point.y,
+                                        frame.height() - point.y,
+                                    ))
+                                } else {
+                                    None
+                                }
+                            },
+                        ));
+                    }
                     let mut pos = pos;
                     if self.is_rtl {
                         // In the grid, cell colspans expand to the right,
@@ -1382,19 +1399,37 @@ impl<'a> GridLayouter<'a> {
                             let group_width = grid_infos.horiz_align_engines[x]
                                 .get_group_size(id)
                                 .unwrap();
-                            println!("{x:?},{y:?} {id:?} {pos:?} {point:?} {position:?}");
                             dx = position - point.x;
                             w = group_width;
                             break;
                         }
                     }
-                    println!("pos {pos:?} x {x:?} align {align:?} w {w:?} rcol {rcol:?}");
                     pos.x += align.x.position(rcol - w) + dx;
-                    output.push_frame(pos, frame);
+                    frames.push((pos, frame, align.y));
                 }
             }
 
             pos.x += rcol;
+        }
+
+        vertical_align_engine.compute_positions();
+        vertical_align_engine.clip_positions();
+
+        let mut output = Frame::soft(Size::new(self.width, height));
+        for (mut pos, frame, align_y) in frames {
+            let mut dy = Abs::zero();
+            let mut h = frame.height();
+            for (point, id, _horizontal, vertical) in frame.align_points() {
+                if *vertical {
+                    let (position, ..) = vertical_align_engine.get_position(id).unwrap();
+                    let group_height = vertical_align_engine.get_group_size(id).unwrap();
+                    dy = position - point.y;
+                    h = group_height;
+                    break;
+                }
+            }
+            pos.y += align_y.position(height - h) + dy;
+            output.push_frame(pos, frame);
         }
 
         Ok(output)
