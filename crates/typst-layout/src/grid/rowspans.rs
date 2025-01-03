@@ -142,7 +142,7 @@ impl<'a> GridLayouter<'a> {
         }
 
         // Push the layouted frames directly into the finished frames.
-        let fragment = grid_infos.layout_cell(
+        let (fragment, _align) = grid_infos.layout_cell(
             engine,
             cell,
             x,

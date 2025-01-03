@@ -736,9 +736,10 @@ impl<'a> GridLayouter<'a> {
         self.width = self.rcols.iter().sum();
 
         // Compute columns align points.
-        let mut align_engine = AlignPointsEngine::new();
+        let mut align_engines = Vec::with_capacity(self.grid.cols.len());
         let mut position = Abs::zero();
         for (x, &rcol) in self.rcols.iter().enumerate() {
+            let mut align_engine = AlignPointsEngine::new();
             for y in 0..self.grid.rows.len() {
                 // We get the parent cell in case this is a merged position.
                 let Some(parent) = self.grid.parent_cell_position(x, y) else {
@@ -753,7 +754,7 @@ impl<'a> GridLayouter<'a> {
 
                 let size = Size::new(rcol, Abs::inf());
                 let pod = Region::new(size, Axes::splat(false));
-                let frame = grid_infos.layout_cell_frame_ref(
+                let (frame, _align) = grid_infos.layout_cell_frame_ref(
                     engine,
                     cell,
                     parent.x,
@@ -768,7 +769,7 @@ impl<'a> GridLayouter<'a> {
                             if *horizontal {
                                 Some((
                                     id.clone(),
-                                    position + point.x,
+                                    point.x,
                                     point.x,
                                     frame.width() - point.x,
                                 ))
@@ -780,10 +781,11 @@ impl<'a> GridLayouter<'a> {
                 }
             }
             position += rcol;
+            align_engine.compute_positions();
+            align_engine.clip_positions();
+            align_engines.push(align_engine);
         }
-        align_engine.compute_positions();
-        align_engine.clip_positions();
-        grid_infos.horiz_align_engine = align_engine;
+        grid_infos.horiz_align_engines = align_engines;
 
         Ok(())
     }
@@ -910,17 +912,16 @@ impl<'a> GridLayouter<'a> {
 
                 let size = Size::new(available, height);
                 let pod = Region::new(size, Axes::splat(false));
-                let frame = grid_infos
-                    .layout_cell(
-                        engine,
-                        cell,
-                        parent.x,
-                        parent.y,
-                        0,
-                        self.styles,
-                        pod.into(),
-                    )?
-                    .into_frame();
+                let (fragment, _align) = grid_infos.layout_cell(
+                    engine,
+                    cell,
+                    parent.x,
+                    parent.y,
+                    0,
+                    self.styles,
+                    pod.into(),
+                )?;
+                let frame = fragment.into_frame();
                 resolved.set_max(frame.width() - already_covered_width);
             }
 
@@ -1168,17 +1169,16 @@ impl<'a> GridLayouter<'a> {
                 pod
             };
 
-            let frames = grid_infos
-                .layout_cell(
-                    engine,
-                    cell,
-                    parent.x,
-                    parent.y,
-                    disambiguator,
-                    self.styles,
-                    pod,
-                )?
-                .into_frames();
+            let (fragment, _align) = grid_infos.layout_cell(
+                engine,
+                cell,
+                parent.x,
+                parent.y,
+                disambiguator,
+                self.styles,
+                pod,
+            )?;
+            let frames = fragment.into_frames();
 
             // Skip the first region if one cell in it is empty. Then,
             // remeasure.
@@ -1348,9 +1348,16 @@ impl<'a> GridLayouter<'a> {
                         // rows.
                         pod.full = self.regions.full;
                     }
-                    let frame = grid_infos
-                        .layout_cell(engine, cell, x, y, disambiguator, self.styles, pod)?
-                        .into_frame();
+                    let (fragment, align) = grid_infos.layout_cell(
+                        engine,
+                        cell,
+                        x,
+                        y,
+                        disambiguator,
+                        self.styles,
+                        pod,
+                    )?;
+                    let frame = fragment.into_frame();
                     let mut pos = pos;
                     if self.is_rtl {
                         // In the grid, cell colspans expand to the right,
@@ -1365,15 +1372,24 @@ impl<'a> GridLayouter<'a> {
                         let offset = -width + rcol;
                         pos.x += offset;
                     }
+                    let mut dx = Abs::zero();
+                    let mut w = frame.width();
                     for (point, id, horizontal, _vertical) in frame.align_points() {
                         if *horizontal {
-                            let (position, ..) =
-                                grid_infos.horiz_align_engine.get_position(id).unwrap();
-                            //println!("{x:?},{y:?} {id:?} {pos:?} {point:?} {position:?}");
-                            pos.x += position - point.x;
+                            let (position, ..) = grid_infos.horiz_align_engines[x]
+                                .get_position(id)
+                                .unwrap();
+                            let group_width = grid_infos.horiz_align_engines[x]
+                                .get_group_size(id)
+                                .unwrap();
+                            println!("{x:?},{y:?} {id:?} {pos:?} {point:?} {position:?}");
+                            dx = position - point.x;
+                            w = group_width;
                             break;
                         }
                     }
+                    println!("pos {pos:?} x {x:?} align {align:?} w {w:?} rcol {rcol:?}");
+                    pos.x += align.x.position(rcol - w) + dx;
                     output.push_frame(pos, frame);
                 }
             }
@@ -1415,7 +1431,7 @@ impl<'a> GridLayouter<'a> {
                     pod.size.x = width;
 
                     // Push the layouted frames into the individual output frames.
-                    let fragment = grid_infos.layout_cell(
+                    let (fragment, _align) = grid_infos.layout_cell(
                         engine,
                         cell,
                         x,

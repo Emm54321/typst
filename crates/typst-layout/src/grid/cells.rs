@@ -4,11 +4,11 @@ use std::sync::Arc;
 use ecow::eco_format;
 use typst_library::diag::{bail, At, Hint, HintedStrResult, HintedString, SourceResult};
 use typst_library::engine::Engine;
-use typst_library::foundations::{Content, Smart, StyleChain};
+use typst_library::foundations::{Content, Packed, Resolve, Smart, StyleChain};
 use typst_library::introspection::Locator;
 use typst_library::layout::{
-    Abs, Alignment, Axes, Celled, Fragment, Length, Regions, Rel, ResolvedCelled, Sides,
-    Sizing,
+    Abs, Alignment, Axes, Celled, FixedAlignment, Fragment, GridCell, Length, Regions,
+    Rel, ResolvedCelled, Sides, Sizing,
 };
 use typst_library::visualize::{Paint, Stroke};
 use typst_syntax::Span;
@@ -144,12 +144,14 @@ impl<'a> Cell<'a> {
         disambiguator: usize,
         styles: StyleChain,
         regions: Regions,
-    ) -> SourceResult<Fragment> {
+    ) -> SourceResult<(Fragment, Axes<FixedAlignment>)> {
         let mut locator = self.locator.relayout();
         if disambiguator > 0 {
             locator = locator.split().next_inner(disambiguator as u128);
         }
-        crate::layout_fragment(engine, &self.body, locator, styles, regions)
+        let cell: &Packed<GridCell> = self.body.to_packed().unwrap();
+        let align = cell.align(styles).unwrap_or_default().resolve(styles);
+        Ok((crate::layout_fragment(engine, &self.body, locator, styles, regions)?, align))
     }
 }
 
