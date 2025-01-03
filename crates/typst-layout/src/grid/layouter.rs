@@ -822,6 +822,7 @@ impl<'a> GridLayouter<'a> {
                 continue;
             }
 
+            let mut align_engine = AlignPointsEngine::new();
             let mut resolved = Abs::zero();
             for y in 0..self.grid.rows.len() {
                 // We get the parent cell in case this is a merged position.
@@ -922,7 +923,29 @@ impl<'a> GridLayouter<'a> {
                     pod.into(),
                 )?;
                 let frame = fragment.into_frame();
+                if frame.has_align_points() {
+                    align_engine.add_group(frame.align_points().filter_map(
+                        |(point, id, horizontal, _vertical)| {
+                            if *horizontal {
+                                Some((
+                                    id.clone(),
+                                    point.x,
+                                    point.x,
+                                    frame.width() - point.x,
+                                ))
+                            } else {
+                                None
+                            }
+                        },
+                    ));
+                }
                 resolved.set_max(frame.width() - already_covered_width);
+            }
+
+            align_engine.compute_positions();
+            for width in align_engine.group_sizes() {
+                // TODO: handle already_covered_width
+                resolved.set_max(width);
             }
 
             self.rcols[x] = resolved;

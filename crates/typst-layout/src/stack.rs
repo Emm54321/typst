@@ -238,8 +238,8 @@ impl<'a> StackLayouter<'a> {
         align_points_engine.clip_positions();
 
         // Expand the cross size if required by align points.
-        for (before, after) in align_points_engine.group_sizes() {
-            self.used.cross.set_max(before + after);
+        for size in align_points_engine.group_sizes() {
+            self.used.cross.set_max(size);
         }
         let other = self.axis.other();
 

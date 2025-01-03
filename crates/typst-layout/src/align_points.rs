@@ -151,9 +151,9 @@ impl AlignPointsEngine {
         })
     }
 
-    pub fn group_sizes(&self) -> impl '_ + Iterator<Item = (Abs, Abs)> {
+    pub fn group_sizes(&self) -> impl '_ + Iterator<Item = Abs> {
         self.positioned_points.values().filter_map(|info| match info {
-            PointInfo::Parent { before, after, .. } => Some((*before, *after)),
+            PointInfo::Parent { before, after, .. } => Some(*before + *after),
             PointInfo::Child { .. } => None,
         })
     }
