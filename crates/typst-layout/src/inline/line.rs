@@ -11,6 +11,7 @@ use typst_library::text::{Lang, TextElem};
 use typst_utils::Numeric;
 
 use super::*;
+use crate::align_points::AlignItem;
 use crate::AlignPointsEngine;
 
 const SHY: char = '\u{ad}';
@@ -550,14 +551,7 @@ pub fn commit(
     let mut align_points_engine = AlignPointsEngine::new();
     for (id, (_offset, _horizontal, vertical)) in &align_points {
         if *vertical {
-            align_points_engine.add_positioned_point(
-                id.clone(),
-                Abs::zero(),
-                Abs::zero(),
-                Abs::zero(),
-                Abs::zero(),
-                Abs::inf(),
-            );
+            align_points_engine.add_positioned_point(id.clone(), Default::default());
         }
     }
     for (_, frame) in &frames {
@@ -567,12 +561,12 @@ pub fn commit(
                 Abs::inf(),
                 frame.align_points().filter_map(|(point, id, _horizontal, vertical)| {
                     if *vertical {
-                        Some((
-                            id.clone(),
-                            point.y - frame.baseline(),
-                            frame.baseline(),
-                            frame.height() - frame.baseline(),
-                        ))
+                        Some(AlignItem {
+                            id: id.clone(),
+                            position: point.y - frame.baseline(),
+                            before: frame.baseline(),
+                            after: frame.height() - frame.baseline(),
+                        })
                     } else {
                         None
                     }

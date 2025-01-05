@@ -9,7 +9,7 @@ use typst_library::layout::{
 use typst_syntax::Span;
 use typst_utils::{Get, Numeric};
 
-use crate::align_points::AlignPointsEngine;
+use crate::align_points::{AlignItem, AlignPointsEngine};
 
 /// Layout the stack.
 #[typst_macros::time(span = elem.span())]
@@ -228,7 +228,12 @@ impl<'a> StackLayouter<'a> {
                                     Axis::Y => (point.x, frame.width(), *horizontal),
                                 };
                                 if usable {
-                                    Some((id.clone(), offset, offset, size - offset))
+                                    Some(AlignItem {
+                                        id: id.clone(),
+                                        position: offset,
+                                        before: offset,
+                                        after: size - offset,
+                                    })
                                 } else {
                                     None
                                 }

@@ -51,17 +51,7 @@ impl GridInfos {
             .map(|(size, frame, align)| (*size, frame, *align))
     }
 
-    pub fn set_frame(
-        &mut self,
-        x: usize,
-        y: usize,
-        size: Size,
-        frame: Frame,
-        align: Axes<FixedAlignment>,
-    ) {
-        self.get_mut(x, y).frame = Some((size, frame, align))
-    }
-
+    #[allow(clippy::too_many_arguments)]
     pub fn layout_cell(
         &mut self,
         engine: &mut Engine,
@@ -72,24 +62,25 @@ impl GridInfos {
         styles: StyleChain,
         regions: Regions,
     ) -> SourceResult<(Fragment, Axes<FixedAlignment>)> {
-        println!("layout {x:?},{y:?} for {:?}", regions.size);
+        //println!("layout {x:?},{y:?} for {:?}", regions.size);
         let entry = self.get_mut(x, y);
         if let Some((size, frame, align)) = &entry.frame {
             if regions.size.x == size.x && regions.size.y >= size.y {
-                println!("cached frame");
+                //println!("cached frame");
                 return Ok((Fragment::frame(frame.clone()), *align));
             }
         }
         let (fragment, align) = cell.layout(engine, disambiguator, styles, regions)?;
-        println!("{} frames", fragment.len());
+        //println!("{} frames", fragment.len());
         if fragment.len() == 1 {
             let frame = fragment.as_slice().first().unwrap().clone();
-            println!("frame size {:?}", frame.size());
+            //println!("frame size {:?}", frame.size());
             entry.frame = Some((Size::new(regions.size.x, frame.height()), frame, align));
         }
         Ok((fragment, align))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn layout_cell_frame_ref<'a>(
         &'a mut self,
         engine: &mut Engine,
@@ -100,13 +91,13 @@ impl GridInfos {
         styles: StyleChain,
         regions: Regions,
     ) -> SourceResult<(&'a Frame, Axes<FixedAlignment>)> {
-        println!("layout frame ref {x:?},{y:?} for {:?}", regions.size);
+        //println!("layout frame ref {x:?},{y:?} for {:?}", regions.size);
         let entry = self.get_mut(x, y);
         let mut insert = true;
         {
             if let Some((size, _frame, _align)) = &entry.frame {
                 if regions.size.x == size.x && regions.size.y >= size.y {
-                    println!("cached frame");
+                    //println!("cached frame");
                     insert = false;
                     //return Ok(frame); confuses the borrow checker
                 }
@@ -116,7 +107,7 @@ impl GridInfos {
             let (fragment, align) =
                 cell.layout(engine, disambiguator, styles, regions)?;
             let frame = fragment.into_frame();
-            println!("frame size {:?}", frame.size());
+            //println!("frame size {:?}", frame.size());
             let (_size, frame, align) = entry.frame.insert((
                 Size::new(regions.size.x, frame.height()),
                 frame,

@@ -5,7 +5,7 @@ mod lines;
 mod repeated;
 mod rowspans;
 
-pub use self::cell_infos::{CellInfos, GridInfos};
+pub use self::cell_infos::GridInfos;
 pub use self::cells::{Cell, CellGrid};
 pub use self::layouter::GridLayouter;
 

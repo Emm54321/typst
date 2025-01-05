@@ -12,7 +12,7 @@ use typst_library::visualize::Geometry;
 use typst_syntax::Span;
 use typst_utils::{MaybeReverseIter, Numeric};
 
-use crate::align_points::AlignPointsEngine;
+use crate::align_points::{AlignItem, AlignPointsEngine};
 
 use super::{
     generate_line_segments, hline_stroke_at_column, vline_stroke_at_row, Cell, CellGrid,
@@ -774,12 +774,12 @@ impl<'a> GridLayouter<'a> {
                         frame.align_points().filter_map(
                             |(point, id, horizontal, _vertical)| {
                                 if *horizontal {
-                                    Some((
-                                        id.clone(),
-                                        point.x + position - col_offset,
-                                        point.x,
-                                        frame.width() - point.x,
-                                    ))
+                                    Some(AlignItem {
+                                        id: id.clone(),
+                                        position: point.x + position - col_offset,
+                                        before: point.x,
+                                        after: frame.width() - point.x,
+                                    })
                                 } else {
                                     None
                                 }
@@ -963,12 +963,12 @@ impl<'a> GridLayouter<'a> {
                         frame.align_points().filter_map(
                             |(point, id, horizontal, _vertical)| {
                                 if *horizontal {
-                                    Some((
-                                        id.clone(),
-                                        point.x,
-                                        point.x,
-                                        frame.width() - point.x,
-                                    ))
+                                    Some(AlignItem {
+                                        id: id.clone(),
+                                        position: point.x,
+                                        before: point.x,
+                                        after: frame.width() - point.x,
+                                    })
                                 } else {
                                     None
                                 }
@@ -1144,6 +1144,7 @@ impl<'a> GridLayouter<'a> {
     /// The `row_group_data` option is used within the unbreakable row group
     /// simulator to predict the height of the auto row if previous rows in the
     /// group were placed in the same region.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn measure_auto_row(
         &self,
         engine: &mut Engine,
@@ -1426,12 +1427,12 @@ impl<'a> GridLayouter<'a> {
                             frame.align_points().filter_map(
                                 |(point, id, _horizontal, vertical)| {
                                     if *vertical {
-                                        Some((
-                                            id.clone(),
-                                            point.y,
-                                            point.y,
-                                            frame.height() - point.y,
-                                        ))
+                                        Some(AlignItem {
+                                            id: id.clone(),
+                                            position: point.y,
+                                            before: point.y,
+                                            after: frame.height() - point.y,
+                                        })
                                     } else {
                                         None
                                     }

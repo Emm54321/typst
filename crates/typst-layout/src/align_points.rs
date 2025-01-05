@@ -5,14 +5,53 @@ use typst_library::layout::{Abs, AlignPointId};
 
 #[derive(Debug, Default)]
 pub struct AlignPointsEngine {
-    positioned_points: HashMap<AlignPointId, PointInfo>,
-    remaining: Vec<(Abs, Abs, Vec<(AlignPointId, Abs, Abs, Abs)>)>,
+    positioned_points: HashMap<AlignPointId, PointType>,
+    remaining: Vec<(Abs, Abs, Vec<AlignItem>)>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct PointInfo {
+    pub position: Abs,
+    pub before: Abs,
+    pub after: Abs,
+    pub min_pos: Abs,
+    pub max_pos: Abs,
+}
+
+impl PointInfo {
+    fn translate(&mut self, offset: Abs) {
+        self.position += offset;
+        self.before += offset;
+        self.after -= offset;
+        self.min_pos += offset;
+        self.max_pos += offset;
+    }
+}
+
+impl Default for PointInfo {
+    fn default() -> Self {
+        Self {
+            position: Abs::zero(),
+            before: Abs::zero(),
+            after: Abs::zero(),
+            min_pos: Abs::zero(),
+            max_pos: Abs::inf(),
+        }
+    }
 }
 
 #[derive(Debug)]
-enum PointInfo {
-    Parent { position: Abs, before: Abs, after: Abs, min_pos: Abs, max_pos: Abs },
+enum PointType {
+    Parent { info: PointInfo },
     Child { parent: AlignPointId, offset: Abs },
+}
+
+#[derive(Clone, Debug)]
+pub struct AlignItem {
+    pub id: AlignPointId,
+    pub position: Abs,
+    pub before: Abs,
+    pub after: Abs,
 }
 
 impl AlignPointsEngine {
@@ -20,22 +59,8 @@ impl AlignPointsEngine {
         Default::default()
     }
 
-    pub fn clear(&mut self) {
-        self.positioned_points.clear();
-        self.remaining.clear();
-    }
-
-    pub fn add_positioned_point(
-        &mut self,
-        id: AlignPointId,
-        position: Abs,
-        before: Abs,
-        after: Abs,
-        min_pos: Abs,
-        max_pos: Abs,
-    ) {
-        self.positioned_points
-            .insert(id, PointInfo::Parent { position, before, after, min_pos, max_pos });
+    pub fn add_positioned_point(&mut self, id: AlignPointId, info: PointInfo) {
+        self.positioned_points.insert(id, PointType::Parent { info });
     }
 
     /// Add a group of align points.
@@ -45,7 +70,7 @@ impl AlignPointsEngine {
         &mut self,
         min_pos: Abs,
         max_pos: Abs,
-        group: impl IntoIterator<Item = (AlignPointId, Abs, Abs, Abs)>,
+        group: impl IntoIterator<Item = AlignItem>,
     ) {
         self.remaining
             .push((min_pos, max_pos, group.into_iter().collect::<Vec<_>>()));
@@ -59,12 +84,12 @@ impl AlignPointsEngine {
             while k < self.remaining.len() {
                 let &(min_pos, max_pos, ref align_points) = &self.remaining[k];
                 let mut found = None;
-                for &(ref id, position, _before, _after) in align_points {
-                    if let Some((parent, offset)) = self.get_parent(id) {
+                for item in align_points {
+                    if let Some((parent, offset)) = self.get_parent(&item.id) {
                         found = Some((
                             parent,
                             offset,
-                            position,
+                            item.position,
                             min_pos,
                             max_pos,
                             self.remaining.swap_remove(k).2,
@@ -85,39 +110,32 @@ impl AlignPointsEngine {
                     //println!("parent {parent:?} parent_to_ref_offset {parent_to_ref_offset:?} old_ref_position {old_ref_position:?}");
                     //println!("align_points {align_points:?}");
                     //TODO: error if there are conflicting align points.
-                    let (
-                        _new_parent_position,
-                        mut max_before,
-                        mut max_after,
-                        mut new_min_pos,
-                        mut new_max_pos,
-                    ) = self.get_infos(&parent).unwrap();
+                    let mut new_info = self.get_infos(&parent).unwrap();
                     //println!("new_parent_position {new_parent_position:?} max_before {max_before:?} max_after {max_after:?}");
                     //let new_ref_position = new_parent_position + parent_to_ref_offset;
-                    for (id, old_position, before, after) in align_points {
+                    for item in align_points {
                         //println!("set {id:?}: {old_position:?} {before:?} {after:?}");
                         let offset =
-                            old_position - old_ref_position + parent_to_ref_offset;
+                            item.position - old_ref_position + parent_to_ref_offset;
                         //println!(
                         //    "offset {offset:?} before {:?} after {:?}",
                         //    before - offset,
                         //    after + offset
                         //);
-                        max_before.set_max(before - offset);
-                        max_after.set_max(after + offset);
-                        new_min_pos.set_max(min_group_pos - offset + before);
-                        new_max_pos.set_min(max_group_pos - offset - after);
-                        if let Entry::Vacant(e) = self.positioned_points.entry(id) {
-                            e.insert(PointInfo::Child { parent: parent.clone(), offset });
+                        new_info.before.set_max(item.before - offset);
+                        new_info.after.set_max(item.after + offset);
+                        new_info.min_pos.set_max(min_group_pos - offset + item.before);
+                        new_info.max_pos.set_min(max_group_pos - offset - item.after);
+                        if let Entry::Vacant(e) = self.positioned_points.entry(item.id) {
+                            e.insert(PointType::Child { parent: parent.clone(), offset });
                         }
                     }
                     //println!("max_before {max_before:?} max_after {max_after:?}");
-                    let (_position, before, after, min_parent_pos, max_parent_pos) =
-                        self.get_group_size_mut(&parent).unwrap();
-                    *before = max_before;
-                    *after = max_after;
-                    *min_parent_pos = new_min_pos;
-                    *max_parent_pos = new_max_pos;
+                    let info = self.get_infos_mut(&parent).unwrap();
+                    info.before = new_info.before;
+                    info.after = new_info.after;
+                    info.min_pos = new_info.min_pos;
+                    info.max_pos = new_info.max_pos;
                     changed = true;
                 } else {
                     k += 1;
@@ -127,16 +145,17 @@ impl AlignPointsEngine {
                 if let Some(&(min_pos, max_pos, ref align_points)) =
                     &self.remaining.first()
                 {
-                    if let Some(&(ref id, position, before, after)) = align_points.first()
-                    {
+                    if let Some(item) = align_points.first() {
                         //println!("set position for {id:?} to {position:?}");
                         self.add_positioned_point(
-                            id.clone(),
-                            position,
-                            before,
-                            after,
-                            min_pos,
-                            max_pos,
+                            item.id.clone(),
+                            PointInfo {
+                                position: item.position,
+                                before: item.before,
+                                after: item.after,
+                                min_pos,
+                                max_pos,
+                            },
                         );
                     } else {
                         break;
@@ -149,60 +168,46 @@ impl AlignPointsEngine {
     }
 
     pub fn clip_positions(&mut self) {
-        //println!("before clip: {self:?}");
-        for (_id, info) in &mut self.positioned_points.iter_mut() {
-            if let PointInfo::Parent { position, min_pos, .. } = info {
-                //println!("clip {id:?} {:?} {:?}", position, before);
-                if *position < *min_pos {
-                    //println!("adjust");
-                    *position = *min_pos;
+        for (_id, ty) in &mut self.positioned_points.iter_mut() {
+            if let PointType::Parent { info } = ty {
+                if info.position < info.min_pos {
+                    info.position = info.min_pos;
                 }
             }
         }
-        //println!("after clip: {self:?}");
     }
 
     fn get_parent(&self, id: &AlignPointId) -> Option<(AlignPointId, Abs)> {
         self.positioned_points.get(id).map(|info| match info {
-            PointInfo::Parent { .. } => (id.clone(), Abs::zero()),
-            PointInfo::Child { parent, offset } => (parent.clone(), *offset),
+            PointType::Parent { .. } => (id.clone(), Abs::zero()),
+            PointType::Child { parent, offset } => (parent.clone(), *offset),
         })
     }
 
-    pub fn get_infos(&self, id: &AlignPointId) -> Option<(Abs, Abs, Abs, Abs, Abs)> {
-        self.positioned_points.get(id).map(|info| match info {
-            &PointInfo::Parent { position, before, after, min_pos, max_pos } => {
-                (position, before, after, min_pos, max_pos)
-            }
-            &PointInfo::Child { ref parent, offset } => {
-                let (position, before, after, min_pos, max_pos) =
-                    self.get_infos(parent).unwrap();
-                (
-                    position + offset,
-                    before + offset,
-                    after - offset,
-                    min_pos + offset,
-                    max_pos + offset,
-                )
+    pub fn get_infos(&self, id: &AlignPointId) -> Option<PointInfo> {
+        self.positioned_points.get(id).map(|ty| match *ty {
+            PointType::Parent { info } => info,
+            PointType::Child { ref parent, offset } => {
+                let mut info = self.get_infos(parent).unwrap();
+                info.translate(offset);
+                info
             }
         })
     }
 
     pub fn get_position(&self, id: &AlignPointId) -> Option<Abs> {
-        self.positioned_points.get(id).map(|info| match info {
-            &PointInfo::Parent { position, .. } => position,
-            &PointInfo::Child { ref parent, offset } => {
+        self.positioned_points.get(id).map(|ty| match *ty {
+            PointType::Parent { info } => info.position,
+            PointType::Child { ref parent, offset } => {
                 self.get_position(parent).unwrap() + offset
             }
         })
     }
 
     pub fn get_pos_range(&self, id: &AlignPointId) -> Option<(Abs, Abs, Abs)> {
-        self.positioned_points.get(id).map(|info| match info {
-            &PointInfo::Parent { position, min_pos, max_pos, .. } => {
-                (position, min_pos, max_pos)
-            }
-            &PointInfo::Child { ref parent, offset } => {
+        self.positioned_points.get(id).map(|ty| match *ty {
+            PointType::Parent { info } => (info.position, info.min_pos, info.max_pos),
+            PointType::Child { ref parent, offset } => {
                 let (position, min_pos, max_pos) = self.get_pos_range(parent).unwrap();
                 (position + offset, min_pos + offset, max_pos + offset)
             }
@@ -210,9 +215,9 @@ impl AlignPointsEngine {
     }
 
     pub fn get_range(&self, id: &AlignPointId) -> Option<(Abs, Abs)> {
-        self.positioned_points.get(id).map(|info| match info {
-            &PointInfo::Parent { min_pos, max_pos, .. } => (min_pos, max_pos),
-            &PointInfo::Child { ref parent, offset } => {
+        self.positioned_points.get(id).map(|ty| match *ty {
+            PointType::Parent { info } => (info.min_pos, info.max_pos),
+            PointType::Child { ref parent, offset } => {
                 let (min_pos, max_pos) = self.get_range(parent).unwrap();
                 (min_pos + offset, max_pos + offset)
             }
@@ -225,27 +230,35 @@ impl AlignPointsEngine {
         new_min_pos: Abs,
         new_max_pos: Abs,
     ) -> Option<(Abs, Abs)> {
-        if let Some(info) = self.positioned_points.get_mut(id) {
-            match info {
-                PointInfo::Parent { min_pos, max_pos, .. } => {
-                    let old_min = std::mem::replace(min_pos, new_min_pos.max(*min_pos));
-                    let old_max = std::mem::replace(max_pos, new_max_pos.min(*max_pos));
+        if let Some(ty) = self.positioned_points.get_mut(id) {
+            match ty {
+                PointType::Parent { info } => {
+                    let min_pos = info.min_pos;
+                    let max_pos = info.max_pos;
+                    let old_min =
+                        std::mem::replace(&mut info.min_pos, new_min_pos.max(min_pos));
+                    let old_max =
+                        std::mem::replace(&mut info.max_pos, new_max_pos.min(max_pos));
                     Some((old_min, old_max))
                 }
-                PointInfo::Child { ref parent, offset } => {
+                PointType::Child { ref parent, offset } => {
                     let offset = *offset;
                     let parent = parent.clone();
-                    let Some(PointInfo::Parent { min_pos, max_pos, .. }) =
+                    let Some(PointType::Parent { info }) =
                         self.positioned_points.get_mut(&parent)
                     else {
                         unreachable!()
                     };
-                    let old_min =
-                        std::mem::replace(min_pos, (new_min_pos - offset).max(*min_pos))
-                            + offset;
-                    let old_max =
-                        std::mem::replace(max_pos, (new_max_pos - offset).min(*max_pos))
-                            + offset;
+                    let min_pos = info.min_pos;
+                    let max_pos = info.max_pos;
+                    let old_min = std::mem::replace(
+                        &mut info.min_pos,
+                        (new_min_pos - offset).max(min_pos),
+                    ) + offset;
+                    let old_max = std::mem::replace(
+                        &mut info.max_pos,
+                        (new_max_pos - offset).min(max_pos),
+                    ) + offset;
                     Some((old_min, old_max))
                 }
             }
@@ -255,33 +268,28 @@ impl AlignPointsEngine {
     }
 
     pub fn group_sizes(&self) -> impl '_ + Iterator<Item = Abs> {
-        self.positioned_points.values().filter_map(|info| match info {
-            PointInfo::Parent { before, after, .. } => Some(*before + *after),
-            PointInfo::Child { .. } => None,
+        self.positioned_points.values().filter_map(|ty| match ty {
+            PointType::Parent { info } => Some(info.before + info.after),
+            PointType::Child { .. } => None,
         })
     }
 
     pub fn get_group_size(&self, id: &AlignPointId) -> Option<Abs> {
         self.get_parent(id).and_then(|(parent, _offset)| {
-            if let &PointInfo::Parent { before, after, .. } =
-                &self.positioned_points[&parent]
-            {
-                Some(before + after)
+            if let PointType::Parent { info } = &self.positioned_points[&parent] {
+                Some(info.before + info.after)
             } else {
                 None
             }
         })
     }
 
-    fn get_group_size_mut(
-        &mut self,
-        id: &AlignPointId,
-    ) -> Option<(&mut Abs, &mut Abs, &mut Abs, &mut Abs, &mut Abs)> {
+    fn get_infos_mut(&mut self, id: &AlignPointId) -> Option<&mut PointInfo> {
         self.get_parent(id).and_then(|(parent, _offset)| {
-            if let Some(PointInfo::Parent { position, before, after, min_pos, max_pos }) =
+            if let Some(PointType::Parent { info }) =
                 self.positioned_points.get_mut(&parent)
             {
-                Some((position, before, after, min_pos, max_pos))
+                Some(info)
             } else {
                 None
             }
