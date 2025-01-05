@@ -65,7 +65,7 @@ impl GridInfos {
         //println!("layout {x:?},{y:?} for {:?}", regions.size);
         let entry = self.get_mut(x, y);
         if let Some((size, frame, align)) = &entry.frame {
-            if regions.size.x == size.x && regions.size.y >= size.y {
+            if regions.size.x == size.x && regions.size.y == size.y {
                 //println!("cached frame");
                 return Ok((Fragment::frame(frame.clone()), *align));
             }
@@ -96,7 +96,7 @@ impl GridInfos {
         let mut insert = true;
         {
             if let Some((size, _frame, _align)) = &entry.frame {
-                if regions.size.x == size.x && regions.size.y >= size.y {
+                if regions.size.x == size.x && regions.size.y == size.y {
                     //println!("cached frame");
                     insert = false;
                     //return Ok(frame); confuses the borrow checker
