@@ -17,7 +17,6 @@ impl CellInfos {}
 #[derive(Debug)]
 pub struct GridInfos {
     columns: usize,
-    rows: usize,
     cells: Vec<CellInfos>,
     pub horiz_align_engines: Vec<AlignPointsEngine>,
 }
@@ -28,7 +27,6 @@ impl GridInfos {
         horiz_align_engines.resize_with(columns, Default::default);
         Self {
             columns,
-            rows,
             cells: vec![Default::default(); columns * rows],
             horiz_align_engines,
         }

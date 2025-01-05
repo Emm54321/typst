@@ -555,13 +555,17 @@ pub fn commit(
                 Abs::zero(),
                 Abs::zero(),
                 Abs::zero(),
+                Abs::zero(),
+                Abs::inf(),
             );
         }
     }
     for (_, frame) in &frames {
         if frame.has_align_points() {
-            align_points_engine.add_group(frame.align_points().filter_map(
-                |(point, id, _horizontal, vertical)| {
+            align_points_engine.add_group(
+                Abs::zero(),
+                Abs::inf(),
+                frame.align_points().filter_map(|(point, id, _horizontal, vertical)| {
                     if *vertical {
                         Some((
                             id.clone(),
@@ -572,8 +576,8 @@ pub fn commit(
                     } else {
                         None
                     }
-                },
-            ));
+                }),
+            );
         }
     }
     align_points_engine.compute_positions();

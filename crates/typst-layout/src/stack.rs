@@ -218,19 +218,23 @@ impl<'a> StackLayouter<'a> {
         for item in &self.items {
             if let StackItem::Frame(frame, _align) = item {
                 if frame.has_align_points() {
-                    align_points_engine.add_group(frame.align_points().filter_map(
-                        |(point, id, horizontal, vertical)| {
-                            let (offset, size, usable) = match self.axis {
-                                Axis::X => (point.y, frame.height(), *vertical),
-                                Axis::Y => (point.x, frame.width(), *horizontal),
-                            };
-                            if usable {
-                                Some((id.clone(), offset, offset, size - offset))
-                            } else {
-                                None
-                            }
-                        },
-                    ))
+                    align_points_engine.add_group(
+                        Abs::zero(),
+                        Abs::inf(),
+                        frame.align_points().filter_map(
+                            |(point, id, horizontal, vertical)| {
+                                let (offset, size, usable) = match self.axis {
+                                    Axis::X => (point.y, frame.height(), *vertical),
+                                    Axis::Y => (point.x, frame.width(), *horizontal),
+                                };
+                                if usable {
+                                    Some((id.clone(), offset, offset, size - offset))
+                                } else {
+                                    None
+                                }
+                            },
+                        ),
+                    )
                 }
             }
         }
@@ -298,8 +302,7 @@ impl<'a> StackLayouter<'a> {
                             Axis::Y => (*horizontal, point.x),
                         };
                         if usable {
-                            let (position, ..) =
-                                align_points_engine.get_position(id).unwrap();
+                            let position = align_points_engine.get_position(id).unwrap();
                             delta = position - offset;
                             extra_size = align_points_engine.get_group_size(id).unwrap()
                                 - frame_size;
