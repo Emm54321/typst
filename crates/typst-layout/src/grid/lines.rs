@@ -590,7 +590,7 @@ pub fn hline_stroke_at_column(
 mod test {
     use typst_library::foundations::Content;
     use typst_library::introspection::Locator;
-    use typst_library::layout::{Axes, Sides, Sizing};
+    use typst_library::layout::{Axes, FixedAlignment, Sides, Sizing};
     use typst_utils::NonZeroExt;
 
     use super::super::cells::Entry;
@@ -604,6 +604,7 @@ mod test {
             fill: None,
             colspan: NonZeroUsize::ONE,
             rowspan: NonZeroUsize::ONE,
+            align: Axes::splat(FixedAlignment::Start),
             stroke: Sides::splat(Some(Arc::new(Stroke::default()))),
             stroke_overridden: Sides::splat(false),
             breakable: true,
@@ -617,6 +618,7 @@ mod test {
             fill: None,
             colspan: NonZeroUsize::try_from(colspan).unwrap(),
             rowspan: NonZeroUsize::try_from(rowspan).unwrap(),
+            align: Axes::splat(FixedAlignment::Start),
             stroke: Sides::splat(Some(Arc::new(Stroke::default()))),
             stroke_overridden: Sides::splat(false),
             breakable: true,
