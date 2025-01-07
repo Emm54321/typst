@@ -765,7 +765,7 @@ impl<'a> GridLayouter<'a> {
                 )?;
                 if frame.has_align_points() {
                     if cell.colspan.get() > 1 && parent.x == x {
-                        colspans.push((x, y, cell.colspan.get()));
+                        colspans.push((x, y, self.grid.effective_colspan_of_cell(cell)));
                     }
                     let col_offset: Abs = self.rcols[parent.x..x].iter().sum();
                     align_engine.add_group(
