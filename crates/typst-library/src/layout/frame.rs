@@ -145,10 +145,54 @@ impl Frame {
         !self.align_points.is_empty()
     }
 
+    pub fn has_horizontal_align_points(&self) -> bool {
+        self.align_points
+            .iter()
+            .any(|(_point, _id, horizontal, _vertical)| *horizontal)
+    }
+
+    pub fn has_vertical_align_points(&self) -> bool {
+        self.align_points
+            .iter()
+            .any(|(_point, _id, _horizontal, vertical)| *vertical)
+    }
+
     pub fn align_points(
         &self,
     ) -> std::slice::Iter<'_, (Point, AlignPointId, bool, bool)> {
         self.align_points.iter()
+    }
+
+    pub fn horizontal_align_points(
+        &self,
+    ) -> impl '_ + Iterator<Item = (Abs, &AlignPointId)> {
+        self.align_points
+            .iter()
+            .filter_map(
+                |(point, id, horizontal, _vertical)| {
+                    if *horizontal {
+                        Some((point.x, id))
+                    } else {
+                        None
+                    }
+                },
+            )
+    }
+
+    pub fn vertical_align_points(
+        &self,
+    ) -> impl '_ + Iterator<Item = (Abs, &AlignPointId)> {
+        self.align_points
+            .iter()
+            .filter_map(
+                |(point, id, _horizontal, vertical)| {
+                    if *vertical {
+                        Some((point.y, id))
+                    } else {
+                        None
+                    }
+                },
+            )
     }
 
     /// An iterator over the items inside this frame alongside their positions

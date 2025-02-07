@@ -66,14 +66,12 @@ impl AlignPointsEngine {
     /// Add a group of align points.
     /// Takes the minimal position of an element of the group and a list of align points.
     /// Each align point has an id, a position, and needed space before and after the position.
-    pub fn add_group(
-        &mut self,
-        min_pos: Abs,
-        max_pos: Abs,
-        group: impl IntoIterator<Item = AlignItem>,
-    ) {
-        self.remaining
-            .push((min_pos, max_pos, group.into_iter().collect::<Vec<_>>()));
+    pub fn add_group(&mut self, min_pos: Abs, max_pos: Abs, group: Vec<AlignItem>) {
+        self.remaining.push((min_pos, max_pos, group));
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.remaining.is_empty() && self.positioned_points.is_empty()
     }
 
     pub fn compute_positions(&mut self) {
@@ -184,6 +182,10 @@ impl AlignPointsEngine {
         })
     }
 
+    pub fn has_point(&self, id: &AlignPointId) -> bool {
+        self.positioned_points.contains_key(id)
+    }
+
     pub fn get_infos(&self, id: &AlignPointId) -> Option<PointInfo> {
         self.positioned_points.get(id).map(|ty| match *ty {
             PointType::Parent { info } => info,
@@ -267,6 +269,13 @@ impl AlignPointsEngine {
         }
     }
 
+    pub fn group_ranges(&self) -> impl '_ + Iterator<Item = (Abs, Abs)> {
+        self.positioned_points.values().filter_map(|ty| match ty {
+            PointType::Parent { info } => Some((info.min_pos, info.max_pos)),
+            PointType::Child { .. } => None,
+        })
+    }
+
     pub fn group_sizes(&self) -> impl '_ + Iterator<Item = Abs> {
         self.positioned_points.values().filter_map(|ty| match ty {
             PointType::Parent { info } => Some(info.before + info.after),
@@ -282,6 +291,10 @@ impl AlignPointsEngine {
                 None
             }
         })
+    }
+
+    pub fn get_group_id(&self, id: &AlignPointId) -> Option<AlignPointId> {
+        self.get_parent(id).map(|(parent, _offset)| parent)
     }
 
     fn get_infos_mut(&mut self, id: &AlignPointId) -> Option<&mut PointInfo> {

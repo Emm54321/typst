@@ -555,22 +555,19 @@ pub fn commit(
         }
     }
     for (_, frame) in &frames {
-        if frame.has_align_points() {
+        if frame.has_vertical_align_points() {
             align_points_engine.add_group(
                 Abs::zero(),
                 Abs::inf(),
-                frame.align_points().filter_map(|(point, id, _horizontal, vertical)| {
-                    if *vertical {
-                        Some(AlignItem {
-                            id: id.clone(),
-                            position: point.y - frame.baseline(),
-                            before: frame.baseline(),
-                            after: frame.height() - frame.baseline(),
-                        })
-                    } else {
-                        None
-                    }
-                }),
+                frame
+                    .vertical_align_points()
+                    .map(|(point_y, id)| AlignItem {
+                        id: id.clone(),
+                        position: point_y - frame.baseline(),
+                        before: frame.baseline(),
+                        after: frame.height() - frame.baseline(),
+                    })
+                    .collect(),
             );
         }
     }
@@ -578,9 +575,9 @@ pub fn commit(
     align_points_engine.adjust_positions(frames.iter_mut().map(|(pos, frame)| {
         (
             &mut pos.y,
-            frame.align_points().map(|(point, id, _horizontal, _vertical)| {
-                (id.clone(), point.y - frame.baseline())
-            }),
+            frame
+                .vertical_align_points()
+                .map(|(point_y, id)| (id.clone(), point_y - frame.baseline())),
         )
     }));
     let mut top = Abs::zero();

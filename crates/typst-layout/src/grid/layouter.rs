@@ -1,11 +1,13 @@
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::Debug;
 
 use typst_library::diag::{bail, SourceResult};
 use typst_library::engine::Engine;
 use typst_library::foundations::{Resolve, StyleChain};
 use typst_library::layout::{
-    Abs, Axes, Dir, Fr, Fragment, Frame, FrameItem, Length, Point, Region, Regions, Rel,
-    Size, Sizing,
+    Abs, AlignPointId, Axes, Dir, Fr, Fragment, Frame, FrameItem, Length, Point, Region,
+    Regions, Rel, Size, Sizing,
 };
 use typst_library::text::TextElem;
 use typst_library::visualize::Geometry;
@@ -763,7 +765,7 @@ impl<'a> GridLayouter<'a> {
                     self.styles,
                     pod.into(),
                 )?;
-                if frame.has_align_points() {
+                if frame.has_horizontal_align_points() {
                     if cell.colspan.get() > 1 && parent.x == x {
                         colspans.push((x, y, self.grid.effective_colspan_of_cell(cell)));
                     }
@@ -771,20 +773,15 @@ impl<'a> GridLayouter<'a> {
                     align_engine.add_group(
                         position - col_offset,
                         position - col_offset + size.x,
-                        frame.align_points().filter_map(
-                            |(point, id, horizontal, _vertical)| {
-                                if *horizontal {
-                                    Some(AlignItem {
-                                        id: id.clone(),
-                                        position: point.x + position - col_offset,
-                                        before: point.x,
-                                        after: frame.width() - point.x,
-                                    })
-                                } else {
-                                    None
-                                }
-                            },
-                        ),
+                        frame
+                            .horizontal_align_points()
+                            .map(|(point_x, id)| AlignItem {
+                                id: id.clone(),
+                                position: point_x + position - col_offset,
+                                before: point_x,
+                                after: frame.width() - point_x,
+                            })
+                            .collect(),
                     );
                 }
             }
@@ -792,25 +789,23 @@ impl<'a> GridLayouter<'a> {
             align_engine.compute_positions();
             align_engines.push(align_engine);
         }
-        // Link align points of columns tied by a rowspan.
+        // Link align points of columns tied by a colspan.
         for (x, y, colspan) in colspans {
             let (_size, frame, _align) = grid_infos.get_frame(x, y).unwrap();
-            for (_point, id, horizontal, _vertical) in frame.align_points() {
-                if *horizontal {
-                    if let Some((min_pos, max_pos)) = align_engines[x].get_range(id) {
-                        let mut new_min_pos = min_pos;
-                        let mut new_max_pos = max_pos;
-                        for k in 1..colspan {
-                            if let Some((old_min, old_max)) =
-                                align_engines[x + k].set_pos_range(id, min_pos, max_pos)
-                            {
-                                new_min_pos = new_min_pos.max(old_min);
-                                new_max_pos = new_max_pos.min(old_max);
-                            }
+            for (_point_x, id) in frame.horizontal_align_points() {
+                if let Some((min_pos, max_pos)) = align_engines[x].get_range(id) {
+                    let mut new_min_pos = min_pos;
+                    let mut new_max_pos = max_pos;
+                    for k in 1..colspan {
+                        if let Some((old_min, old_max)) =
+                            align_engines[x + k].set_pos_range(id, min_pos, max_pos)
+                        {
+                            new_min_pos = new_min_pos.max(old_min);
+                            new_max_pos = new_max_pos.min(old_max);
                         }
-                        align_engines[x].set_pos_range(id, new_min_pos, new_max_pos);
-                        break; // Linking one point is enough.
                     }
+                    align_engines[x].set_pos_range(id, new_min_pos, new_max_pos);
+                    break; // Linking one point is enough.
                 }
             }
         }
@@ -850,12 +845,15 @@ impl<'a> GridLayouter<'a> {
 
         // Determine size of auto columns by laying out all cells in those
         // columns, measuring them and finding the largest one.
+
+        let mut align_engine = AlignPointsEngine::new();
+        let mut colspans = Vec::new();
+
         for (x, &col) in self.grid.cols.iter().enumerate() {
             if col != Sizing::Auto {
                 continue;
             }
 
-            let mut align_engine = AlignPointsEngine::new();
             let mut resolved = Abs::zero();
             for y in 0..self.grid.rows.len() {
                 // We get the parent cell in case this is a merged position.
@@ -868,24 +866,24 @@ impl<'a> GridLayouter<'a> {
                 }
                 let cell = self.grid.cell(parent.x, parent.y).unwrap();
                 let colspan = self.grid.effective_colspan_of_cell(cell);
-                if colspan > 1 {
-                    let last_spanned_auto_col = self
-                        .grid
-                        .cols
-                        .iter()
-                        .enumerate()
-                        .skip(parent.x)
-                        .take(colspan)
-                        .rev()
-                        .find(|(_, col)| **col == Sizing::Auto)
-                        .map(|(x, _)| x);
-
-                    if last_spanned_auto_col != Some(x) {
-                        // A colspan only affects the size of the last spanned
-                        // auto column.
-                        continue;
-                    }
-                }
+                //if colspan > 1 {
+                //    let last_spanned_auto_col = self
+                //        .grid
+                //        .cols
+                //        .iter()
+                //        .enumerate()
+                //        .skip(parent.x)
+                //        .take(colspan)
+                //        .rev()
+                //        .find(|(_, col)| **col == Sizing::Auto)
+                //        .map(|(x, _)| x);
+                //
+                //    if last_spanned_auto_col != Some(x) {
+                //        // A colspan only affects the size of the last spanned
+                //        // auto column.
+                //        continue;
+                //    }
+                //}
 
                 if colspan > 1
                     && self.regions.size.x.is_finite()
@@ -956,38 +954,288 @@ impl<'a> GridLayouter<'a> {
                     pod.into(),
                 )?;
                 let frame = fragment.into_frame();
-                if frame.has_align_points() {
+                if frame.has_horizontal_align_points() {
+                    if cell.colspan.get() > 1 {
+                        // Align points in colspans require computing their positions
+                        // in non auto columns too. Keep that for later.
+                        colspans.push((
+                            parent.x,
+                            parent.y,
+                            self.grid.effective_colspan_of_cell(cell),
+                        ));
+                    }
                     align_engine.add_group(
                         Abs::zero(),
                         Abs::inf(),
-                        frame.align_points().filter_map(
-                            |(point, id, horizontal, _vertical)| {
-                                if *horizontal {
-                                    Some(AlignItem {
-                                        id: id.clone(),
-                                        position: point.x,
-                                        before: point.x,
-                                        after: frame.width() - point.x,
-                                    })
-                                } else {
-                                    None
-                                }
-                            },
-                        ),
+                        frame
+                            .horizontal_align_points()
+                            .map(|(point_x, id)| AlignItem {
+                                id: id.clone(),
+                                position: point_x,
+                                before: point_x,
+                                after: frame.width() - point_x,
+                            })
+                            .collect(),
                     );
                 }
                 resolved.set_max(frame.width() - already_covered_width);
             }
 
-            align_engine.compute_positions();
-            for width in align_engine.group_sizes() {
-                // TODO: handle already_covered_width
-                resolved.set_max(width);
-            }
+            //align_engine.compute_positions();
+            //for width in align_engine.group_sizes() {
+            //    resolved.set_max(width);
+            //}
 
             self.rcols[x] = resolved;
             auto += resolved;
             count += 1;
+        }
+
+        if !align_engine.is_empty() {
+            if !colspans.is_empty() {
+                let mut columns_done = vec![false; self.grid.cols.len()];
+                // Colspans with align points require computing align points for all spanned columns.
+                // This can't be done for fractional columns though, so for now assume they don't
+                // contain align points that matter for computing the auto column sizes.
+                for &(parent_x, parent_y, colspan) in &colspans {
+                    for (x, col) in
+                        self.grid.cols[parent_x..parent_x + colspan].iter().enumerate()
+                    {
+                        if matches!(col, Sizing::Rel(_)) && !columns_done[x] {
+                            columns_done[x] = true;
+                            for y in 0..self.grid.rows.len() {
+                                let Some(parent) = self.grid.parent_cell_position(x, y)
+                                else {
+                                    continue;
+                                };
+                                if parent.y != y {
+                                    // Don't check the width of rowspans more than once.
+                                    continue;
+                                }
+                                let cell = self.grid.cell(parent.x, parent.y).unwrap();
+                                if cell.colspan.get() > 1 {
+                                    // Handle single column cells only in this pass.
+                                    continue;
+                                }
+                                let size =
+                                    Size::new(self.rcols[x], self.regions.base().y);
+                                let pod = Region::new(size, Axes::splat(false));
+                                let (fragment, _align) = grid_infos.layout_cell(
+                                    engine,
+                                    cell,
+                                    parent.x,
+                                    parent.y,
+                                    0,
+                                    self.styles,
+                                    pod.into(),
+                                )?;
+                                let frame = fragment.into_frame();
+                                if frame.has_horizontal_align_points() {
+                                    align_engine.add_group(
+                                        Abs::zero(),
+                                        Abs::inf(),
+                                        frame
+                                            .horizontal_align_points()
+                                            .map(|(point_x, id)| AlignItem {
+                                                id: id.clone(),
+                                                position: point_x,
+                                                before: point_x,
+                                                after: frame.width() - point_x,
+                                            })
+                                            .collect(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            align_engine.compute_positions();
+
+            // Adjust column sizes if needed, taking only cells with colspan 1 first.
+            let mut ranges: Vec<HashMap<AlignPointId, (Abs, Abs)>> =
+                vec![Default::default(); self.rcols.len()];
+            for (x, &col) in self.grid.cols.iter().enumerate() {
+                if col != Sizing::Auto {
+                    continue;
+                }
+
+                for y in 0..self.grid.rows.len() {
+                    // We get the parent cell in case this is a merged position.
+                    let Some(parent) = self.grid.parent_cell_position(x, y) else {
+                        continue;
+                    };
+                    if parent.y != y {
+                        // Don't check the width of rowspans more than once.
+                        continue;
+                    }
+                    let cell = self.grid.cell(parent.x, parent.y).unwrap();
+                    let colspan = self.grid.effective_colspan_of_cell(cell);
+                    if colspan > 1 {
+                        continue;
+                    }
+
+                    // Sum the heights of spanned rows to find the expected
+                    // available height for the cell, unless it spans a fractional
+                    // or auto column.
+                    let rowspan = self.grid.effective_rowspan_of_cell(cell);
+                    let height = self
+                        .grid
+                        .rows
+                        .iter()
+                        .skip(y)
+                        .take(rowspan)
+                        .try_fold(Abs::zero(), |acc, col| {
+                            // For relative rows, we can already resolve the correct
+                            // base and for auto and fr we could only guess anyway.
+                            match col {
+                                Sizing::Rel(v) => Some(
+                                    acc + v
+                                        .resolve(self.styles)
+                                        .relative_to(self.regions.base().y),
+                                ),
+                                _ => None,
+                            }
+                        })
+                        .unwrap_or_else(|| self.regions.base().y);
+
+                    let size = Size::new(available, height);
+                    let pod = Region::new(size, Axes::splat(false));
+                    let (fragment, _align) = grid_infos.layout_cell(
+                        engine,
+                        cell,
+                        parent.x,
+                        parent.y,
+                        0,
+                        self.styles,
+                        pod.into(),
+                    )?;
+                    let frame = fragment.into_frame();
+                    if frame.has_horizontal_align_points() {
+                        if let Some((point_x, id)) =
+                            frame.horizontal_align_points().next()
+                        {
+                            let group_id = align_engine.get_group_id(id).unwrap();
+                            let pos = align_engine.get_position(id).unwrap();
+                            let min_x = pos - point_x;
+                            let max_x = pos + frame.width() - point_x;
+                            match ranges[x].entry(group_id) {
+                                Entry::Occupied(mut e) => {
+                                    e.get_mut().0.set_min(min_x);
+                                    e.get_mut().1.set_max(max_x);
+                                }
+                                Entry::Vacant(e) => {
+                                    e.insert((min_x, max_x));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let mut new_resolved = Abs::zero();
+                for &(min_x, max_x) in ranges[x].values() {
+                    new_resolved.set_max(max_x - min_x);
+                }
+                if new_resolved > self.rcols[x] {
+                    auto += new_resolved - self.rcols[x];
+                    self.rcols[x] = new_resolved;
+                }
+            }
+
+            // Now link together columns covered by a colspan.
+            if !colspans.is_empty() {
+                for (parent_x, parent_y, colspan) in colspans {
+                    let cell = self.grid.cell(parent_x, parent_y).unwrap();
+                    let size = Size::new(available, self.regions.base().y);
+                    let pod = Region::new(size, Axes::splat(false));
+                    let (fragment, _align) = grid_infos.layout_cell(
+                        engine,
+                        cell,
+                        parent_x,
+                        parent_y,
+                        0,
+                        self.styles,
+                        pod.into(),
+                    )?;
+                    let frame = fragment.into_frame();
+                    // Adjust min_x of the left most auto column.
+                    let mut covered_left = Abs::zero();
+                    for k in 0..colspan {
+                        let x = parent_x + k;
+                        if self.grid.cols[x].is_auto() {
+                            if let Some((point_x, id)) =
+                                frame.horizontal_align_points().next()
+                            {
+                                let group_id = align_engine.get_group_id(id).unwrap();
+                                let pos = align_engine.get_position(id).unwrap();
+                                let min_x = pos - point_x + covered_left;
+                                match ranges[x].entry(group_id) {
+                                    Entry::Occupied(mut e) => {
+                                        e.get_mut().0.set_min(min_x);
+                                    }
+                                    Entry::Vacant(e) => {
+                                        e.insert((min_x, Abs::zero()));
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                        covered_left += self.rcols[x];
+                    }
+                    // Adjust max_x of the right most auto column.
+                    let mut covered_right = Abs::zero();
+                    for k in (0..colspan).rev() {
+                        let x = parent_x + k;
+                        if self.grid.cols[x].is_auto() {
+                            if let Some((point_x, id)) =
+                                frame.horizontal_align_points().next()
+                            {
+                                let group_id = align_engine.get_group_id(id).unwrap();
+                                let pos = align_engine.get_position(id).unwrap();
+                                let max_x = pos + frame.width() - point_x - covered_left;
+                                match ranges[x].entry(group_id) {
+                                    Entry::Occupied(mut e) => {
+                                        e.get_mut().1.set_max(max_x);
+                                    }
+                                    Entry::Vacant(e) => {
+                                        e.insert((Abs::zero(), max_x));
+                                    }
+                                }
+                            }
+                        }
+                        covered_right += self.rcols[x];
+                    }
+                }
+            }
+
+            let mut ranges2 = Vec::with_capacity(ranges.len());
+            for (x, range) in ranges.iter().enumerate() {
+                let mut min = Abs::inf();
+                let mut max = -Abs::inf();
+                for &(min_x, max_x) in range.values() {
+                    min.set_min(min_x);
+                    max.set_max(max_x);
+                }
+                ranges2.push((min, max));
+            }
+
+            let mut w = Abs::zero();
+            for (x, &col) in self.grid.cols.iter().enumerate() {
+                if col == Sizing::Auto {
+                    let mut new_resolved = Abs::zero();
+
+                    for &(min_x, max_x) in ranges[x].values() {
+                        new_resolved.set_max(max_x - min_x);
+                    }
+                    if new_resolved > self.rcols[x] {
+                        auto += new_resolved - self.rcols[x];
+                        self.rcols[x] = new_resolved;
+                    }
+                }
+                //FIXME: what about fractional columns.
+                w += rcols[x];
+            }
         }
 
         Ok((auto, count))
@@ -1420,24 +1668,19 @@ impl<'a> GridLayouter<'a> {
                         pod,
                     )?;
                     let frame = fragment.into_frame();
-                    if frame.has_align_points() {
+                    if frame.has_vertical_align_points() {
                         vertical_align_engine.add_group(
                             Abs::zero(),
                             Abs::inf(),
-                            frame.align_points().filter_map(
-                                |(point, id, _horizontal, vertical)| {
-                                    if *vertical {
-                                        Some(AlignItem {
-                                            id: id.clone(),
-                                            position: point.y,
-                                            before: point.y,
-                                            after: frame.height() - point.y,
-                                        })
-                                    } else {
-                                        None
-                                    }
-                                },
-                            ),
+                            frame
+                                .vertical_align_points()
+                                .map(|(point_y, id)| AlignItem {
+                                    id: id.clone(),
+                                    position: point_y,
+                                    before: point_y,
+                                    after: frame.height() - point_y,
+                                })
+                                .collect(),
                         );
                     }
                     let mut pos = pos;
@@ -1457,16 +1700,11 @@ impl<'a> GridLayouter<'a> {
 
                     let mut dx = Abs::zero();
                     let mut dw = self.cell_spanned_width(cell, x) - frame.width();
-                    for (point, id, horizontal, _vertical) in frame.align_points() {
-                        if *horizontal {
-                            let (position, min_pos, max_pos) = grid_infos
-                                .horiz_align_engines[x]
-                                .get_pos_range(id)
-                                .unwrap();
-                            dw = max_pos - min_pos;
-                            dx = position - point.x - pos.x;
-                            break;
-                        }
+                    if let Some((point_x, id)) = frame.horizontal_align_points().next() {
+                        let (position, min_pos, max_pos) =
+                            grid_infos.horiz_align_engines[x].get_pos_range(id).unwrap();
+                        dw = max_pos - min_pos;
+                        dx = position - point_x - pos.x;
                     }
                     pos.x += dx + align.x.position(dw);
                     frames.push((pos, frame, align.y));
@@ -1483,14 +1721,11 @@ impl<'a> GridLayouter<'a> {
         for (mut pos, frame, align_y) in frames {
             let mut dy = Abs::zero();
             let mut h = frame.height();
-            for (point, id, _horizontal, vertical) in frame.align_points() {
-                if *vertical {
-                    let position = vertical_align_engine.get_position(id).unwrap();
-                    let group_height = vertical_align_engine.get_group_size(id).unwrap();
-                    dy = position - point.y;
-                    h = group_height;
-                    break;
-                }
+            if let Some((point_y, id)) = frame.vertical_align_points().next() {
+                let position = vertical_align_engine.get_position(id).unwrap();
+                let group_height = vertical_align_engine.get_group_size(id).unwrap();
+                dy = position - point_y;
+                h = group_height;
             }
             pos.y += align_y.position(height - h) + dy;
             output.push_frame(pos, frame);
