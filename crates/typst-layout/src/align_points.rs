@@ -20,6 +20,8 @@ macro_rules! debug {
 // TODO: use SmallVec and some small hashmaps version to avoid allocations
 // in the usual case where only one or two align points are used.
 
+// TODO: optimize for the usual case of inline layout: 1 zone, 1 align point (baseline).
+
 #[derive(Debug, Default)]
 pub struct AlignPointsEngine {
     id_to_node: HashMap<AlignPointId, usize>,

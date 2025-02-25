@@ -3,7 +3,7 @@ use std::fmt::{self, Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 
 use typst_library::engine::Engine;
-use typst_library::foundations::{NativeElement, Str};
+use typst_library::foundations::NativeElement;
 use typst_library::introspection::{SplitLocator, Tag};
 use typst_library::layout::{Abs, AlignPointId, Dir, Em, Fr, Frame, FrameItem, Point};
 use typst_library::model::{ParLine, ParLineMarker};
@@ -548,7 +548,7 @@ pub fn commit(
 
     // Handle vertical alignment.
     let mut align_points_engine = AlignPointsEngine::new(1);
-    let baseline_point = AlignPointId::from(Str::from("baseline"));
+    let baseline_point = AlignPointId::unique();
     align_points_engine.add_point(baseline_point.clone(), 0..1, Abs::zero(), Abs::zero());
     // All Item::AlignPoints must be added and tied to the baseline.
     for (id, (_offset, _horizontal, vertical)) in &align_points {
