@@ -43,7 +43,7 @@ pub enum Item<'a> {
     /// isolate.
     Skip(&'static str),
     /// An alignment point
-    AlignPoint(Str),
+    AlignPoint(Str, bool, bool),
 }
 
 impl<'a> Item<'a> {
@@ -72,7 +72,7 @@ impl<'a> Item<'a> {
             Self::Frame(_, _) => OBJ_REPLACE,
             Self::Tag(_) => "",
             Self::Skip(s) => s,
-            Self::AlignPoint(_) => "",
+            Self::AlignPoint(..) => "",
         }
     }
 
@@ -89,7 +89,7 @@ impl<'a> Item<'a> {
             Self::Frame(frame, _) => frame.width(),
             Self::Fractional(_, _) | Self::Tag(_) => Abs::zero(),
             Self::Skip(_) => Abs::zero(),
-            Self::AlignPoint(_) => Abs::zero(),
+            Self::AlignPoint(..) => Abs::zero(),
         }
     }
 }
@@ -233,7 +233,11 @@ pub fn collect<'a>(
         } else if let Some(elem) = child.to_packed::<TagElem>() {
             collector.push_item(Item::Tag(&elem.tag));
         } else if let Some(elem) = child.to_packed::<AlignPointElem>() {
-            collector.push_item(Item::AlignPoint(elem.name(styles)));
+            collector.push_item(Item::AlignPoint(
+                elem.name(styles),
+                elem.horizontal(styles),
+                elem.vertical(styles),
+            ));
         } else {
             bail!(child.span(), "unexpected paragraph child");
         };

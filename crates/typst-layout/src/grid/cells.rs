@@ -7,8 +7,8 @@ use typst_library::engine::Engine;
 use typst_library::foundations::{Content, Smart, StyleChain};
 use typst_library::introspection::Locator;
 use typst_library::layout::{
-    Abs, Alignment, Axes, Celled, Fragment, Length, Regions, Rel, ResolvedCelled, Sides,
-    Sizing,
+    Abs, Alignment, Axes, Celled, FixedAlignment, Fragment, Length, Regions, Rel,
+    ResolvedCelled, Sides, Sizing,
 };
 use typst_library::visualize::{Paint, Stroke};
 use typst_syntax::Span;
@@ -98,6 +98,8 @@ pub struct Cell<'a> {
     pub colspan: NonZeroUsize,
     /// The amount of rows spanned by the cell.
     pub rowspan: NonZeroUsize,
+    /// The cell alignment.
+    pub align: Axes<FixedAlignment>,
     /// The cell's stroke.
     ///
     /// We use an Arc to avoid unnecessary space usage when all sides are the
@@ -126,6 +128,7 @@ impl<'a> Cell<'a> {
             fill: None,
             colspan: NonZeroUsize::ONE,
             rowspan: NonZeroUsize::ONE,
+            align: Axes::new(FixedAlignment::Start, FixedAlignment::Start),
             stroke: Sides::splat(None),
             stroke_overridden: Sides::splat(false),
             breakable: true,
@@ -144,12 +147,15 @@ impl<'a> Cell<'a> {
         disambiguator: usize,
         styles: StyleChain,
         regions: Regions,
-    ) -> SourceResult<Fragment> {
+    ) -> SourceResult<(Fragment, Axes<FixedAlignment>)> {
         let mut locator = self.locator.relayout();
         if disambiguator > 0 {
             locator = locator.split().next_inner(disambiguator as u128);
         }
-        crate::layout_fragment(engine, &self.body, locator, styles, regions)
+        Ok((
+            crate::layout_fragment(engine, &self.body, locator, styles, regions)?,
+            self.align,
+        ))
     }
 }
 
