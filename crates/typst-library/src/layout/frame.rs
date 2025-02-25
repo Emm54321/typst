@@ -31,7 +31,7 @@ pub struct Frame {
     ///
     /// Determines whether it is a boundary for gradient drawing.
     kind: FrameKind,
-    // FIXME:
+    // FIXME: use some small hashmap
     align_points: SmallVec<[(Point, AlignPointId, bool, bool); 2]>,
 }
 
@@ -290,6 +290,7 @@ impl Frame {
         horizontal: bool,
         vertical: bool,
     ) {
+        // TODO: use some small hashmap to store align points.
         if let Some(k) = self.align_points.iter().position(|p| p.1 == id) {
             self.align_points[k].0 = pos;
             self.align_points[k].2 = horizontal;
@@ -351,13 +352,17 @@ impl Frame {
     }
 
     fn take_frame_align_points(&mut self, point: Point, frame: &mut Frame) {
-        //TODO: optimize
-        for (pos, id, horizontal, vertical) in frame.align_points.drain(..) {
-            self.add_align_point(point + pos, id, horizontal, vertical);
+        // Optimize for usual simple cases.
+        if !frame.align_points.is_empty() {
+            if self.align_points.is_empty() {
+                self.align_points = std::mem::take(&mut frame.align_points);
+                self.align_points.iter_mut().for_each(|(pos, ..)| *pos += point);
+            } else {
+                for (pos, id, horizontal, vertical) in frame.align_points.drain(..) {
+                    self.add_align_point(point + pos, id, horizontal, vertical);
+                }
+            }
         }
-        //self.align_points.extend(frame.align_points.drain(..).map(
-        //    |(pos, id, horizontal, vertical)| (point + pos, id, horizontal, vertical),
-        //));
     }
 
     fn take_item_align_points(&mut self, point: Point, item: &mut FrameItem) {
