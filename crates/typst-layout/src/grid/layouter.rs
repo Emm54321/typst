@@ -15,7 +15,7 @@ use typst_library::visualize::Geometry;
 use typst_syntax::Span;
 use typst_utils::Numeric;
 
-use crate::align_points::AlignPointsEngine;
+use crate::align_engine::AlignmentEngine;
 
 use super::{
     generate_line_segments, hline_stroke_at_column, layout_cell, vline_stroke_at_row,
@@ -930,7 +930,7 @@ impl<'a> GridLayouter<'a> {
         self.width = self.rcols.iter().sum();
 
         // Compute columns align points.
-        let mut align_engine = AlignPointsEngine::new(self.rcols.len(), self.is_rtl);
+        let mut align_engine = AlignmentEngine::new(self.rcols.len(), self.is_rtl);
         for (x, &rcol) in self.rcols.iter().enumerate() {
             align_engine.set_zone_size(x, rcol);
             for y in 0..self.grid.rows.len() {
@@ -977,14 +977,14 @@ impl<'a> GridLayouter<'a> {
                 }
             }
         }
-        align_engine.compute_positions();
+        let align_infos = align_engine.compute();
         let CLEANUP = true;
         //println!("Measure columns: {align_engine:?}");
         //println!("relations:");
         //println!("{:?}", align_engine.relations());
         //println!("positions:");
         //println!("{:?}", align_engine.positions());
-        grid_infos.horiz_align_engine = Some(align_engine);
+        grid_infos.horiz_align_engine = Some(align_infos);
 
         Ok(())
     }
@@ -1015,7 +1015,7 @@ impl<'a> GridLayouter<'a> {
         // Determine size of auto columns by laying out all cells in those
         // columns, measuring them and finding the largest one.
 
-        let mut align_engine = AlignPointsEngine::new(self.grid.cols.len(), self.is_rtl);
+        let mut align_engine = AlignmentEngine::new(self.grid.cols.len(), self.is_rtl);
 
         for (x, &col) in self.grid.cols.iter().enumerate() {
             // Non Sizing::Auto columns may affect Auto ones via align points and colspan.
@@ -1142,7 +1142,7 @@ impl<'a> GridLayouter<'a> {
             }
         }
 
-        align_engine.compute_positions();
+        let align_infos = align_engine.compute();
         let CLEANUP = true;
         //println!("Measure auto columns: {align_engine:?}");
         //println!("relations:");
@@ -1154,7 +1154,7 @@ impl<'a> GridLayouter<'a> {
         let mut count = 0;
         for (k, (rcol, &col)) in self.rcols.iter_mut().zip(&self.grid.cols).enumerate() {
             if col == Sizing::Auto {
-                *rcol = align_engine.get_zone_size(k);
+                *rcol = align_infos.get_zone_size(k);
                 auto += *rcol;
                 count += 1;
             }
@@ -1550,7 +1550,7 @@ impl<'a> GridLayouter<'a> {
             bail!(self.span, "cannot create grid with infinite height");
         }
 
-        let mut vertical_align_engine = AlignPointsEngine::new(1, false);
+        let mut vertical_align_engine = AlignmentEngine::new(1, false);
         let mut frames = Vec::with_capacity(self.rcols.len());
 
         for (x, &rcol) in self.rcols.iter().enumerate() {
@@ -1619,14 +1619,14 @@ impl<'a> GridLayouter<'a> {
             }
         }
 
-        vertical_align_engine.compute_positions();
+        let align_infos = vertical_align_engine.compute();
 
         let mut output = Frame::soft(Size::new(self.width, height));
         for (mut pos, frame, align_y) in frames {
             let mut dy = Abs::zero();
             let mut h = frame.height();
             if let Some((point_y, id)) = frame.vertical_align_points().next() {
-                let position = vertical_align_engine.get_position(id);
+                let position = align_infos.get_position(id);
                 dy = position - point_y;
                 let FIXME = true;
                 //let group_height = vertical_align_engine.get_group_size(id).unwrap();
