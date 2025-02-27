@@ -3,7 +3,7 @@ use typst_library::engine::Engine;
 use typst_library::foundations::StyleChain;
 use typst_library::layout::{Axes, FixedAlignment, Fragment, Frame, Regions, Size};
 
-use crate::align_points::AlignPointsEngine;
+use crate::align_engine::AlignmentInfos;
 
 use super::{layout_cell, Cell};
 
@@ -18,7 +18,7 @@ impl CellInfos {}
 pub struct GridInfos {
     columns: usize,
     cells: Vec<CellInfos>,
-    pub horiz_align_engine: Option<AlignPointsEngine>,
+    pub horiz_align_engine: Option<AlignmentInfos>,
 }
 
 impl GridInfos {
