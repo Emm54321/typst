@@ -4,12 +4,16 @@ use std::fmt::{self, Debug, Formatter};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
+use smallvec::SmallVec;
+
 use typst_syntax::Span;
 use typst_utils::{LazyHash, Numeric};
 
 use crate::foundations::{cast, dict, Dict, Label, Value};
 use crate::introspection::{Location, Tag};
-use crate::layout::{Abs, Axes, FixedAlignment, Length, Point, Size, Transform};
+use crate::layout::{
+    Abs, AlignPointId, Axes, FixedAlignment, Length, Point, Size, Transform,
+};
 use crate::model::Destination;
 use crate::text::TextItem;
 use crate::visualize::{Color, Curve, FixedStroke, Geometry, Image, Paint, Shape};
@@ -28,6 +32,8 @@ pub struct Frame {
     ///
     /// Determines whether it is a boundary for gradient drawing.
     kind: FrameKind,
+    // FIXME: use some small hashmap
+    align_points: SmallVec<[(Point, AlignPointId, bool, bool); 2]>,
 }
 
 /// Constructor, accessors and setters.
@@ -43,6 +49,7 @@ impl Frame {
             baseline: None,
             items: Arc::new(LazyHash::new(vec![])),
             kind,
+            align_points: Default::default(),
         }
     }
 
@@ -136,6 +143,60 @@ impl Frame {
         self.size.y - self.baseline()
     }
 
+    pub fn has_align_points(&self) -> bool {
+        !self.align_points.is_empty()
+    }
+
+    pub fn has_horizontal_align_points(&self) -> bool {
+        self.align_points
+            .iter()
+            .any(|(_point, _id, horizontal, _vertical)| *horizontal)
+    }
+
+    pub fn has_vertical_align_points(&self) -> bool {
+        self.align_points
+            .iter()
+            .any(|(_point, _id, _horizontal, vertical)| *vertical)
+    }
+
+    pub fn align_points(
+        &self,
+    ) -> std::slice::Iter<'_, (Point, AlignPointId, bool, bool)> {
+        self.align_points.iter()
+    }
+
+    pub fn horizontal_align_points(
+        &self,
+    ) -> impl '_ + Iterator<Item = (Abs, &AlignPointId)> {
+        self.align_points
+            .iter()
+            .filter_map(
+                |(point, id, horizontal, _vertical)| {
+                    if *horizontal {
+                        Some((point.x, id))
+                    } else {
+                        None
+                    }
+                },
+            )
+    }
+
+    pub fn vertical_align_points(
+        &self,
+    ) -> impl '_ + Iterator<Item = (Abs, &AlignPointId)> {
+        self.align_points
+            .iter()
+            .filter_map(
+                |(point, id, _horizontal, vertical)| {
+                    if *vertical {
+                        Some((point.y, id))
+                    } else {
+                        None
+                    }
+                },
+            )
+    }
+
     /// An iterator over the items inside this frame alongside their positions
     /// relative to the top-left of the frame.
     pub fn items(&self) -> std::slice::Iter<'_, (Point, FrameItem)> {
@@ -152,7 +213,8 @@ impl Frame {
     }
 
     /// Add an item at a position in the foreground.
-    pub fn push(&mut self, pos: Point, item: FrameItem) {
+    pub fn push(&mut self, pos: Point, mut item: FrameItem) {
+        self.take_item_align_points(pos, &mut item);
         Arc::make_mut(&mut self.items).push((pos, item));
     }
 
@@ -164,15 +226,20 @@ impl Frame {
     where
         I: IntoIterator<Item = (Point, FrameItem)>,
     {
-        Arc::make_mut(&mut self.items).extend(items);
+        //TODO: improve
+        for (pos, frame) in items {
+            self.push(pos, frame);
+        }
+        //Arc::make_mut(&mut self.items).extend(iter);
     }
 
     /// Add a frame at a position in the foreground.
     ///
     /// Automatically decides whether to inline the frame or to include it as a
     /// group based on the number of items in it.
-    pub fn push_frame(&mut self, pos: Point, frame: Frame) {
+    pub fn push_frame(&mut self, pos: Point, mut frame: Frame) {
         if self.should_inline(&frame) {
+            self.take_frame_align_points(pos, &mut frame);
             self.inline(self.layer(), pos, frame);
         } else {
             self.push(pos, FrameItem::Group(GroupItem::new(frame)));
@@ -183,7 +250,8 @@ impl Frame {
     ///
     /// This panics if the layer is greater than the number of layers present.
     #[track_caller]
-    pub fn insert(&mut self, layer: usize, pos: Point, item: FrameItem) {
+    pub fn insert(&mut self, layer: usize, pos: Point, mut item: FrameItem) {
+        self.take_item_align_points(pos, &mut item);
         Arc::make_mut(&mut self.items).insert(layer, (pos, item));
     }
 
@@ -200,7 +268,11 @@ impl Frame {
     where
         I: IntoIterator<Item = (Point, FrameItem)>,
     {
-        Arc::make_mut(&mut self.items).splice(0..0, items);
+        //TODO: improve
+        for (k, (pos, item)) in items.into_iter().enumerate() {
+            self.insert(k, pos, item);
+        }
+        //Arc::make_mut(&mut self.items).splice(0..0, items);
     }
 
     /// Add a frame at a position in the background.
@@ -209,6 +281,23 @@ impl Frame {
             self.inline(0, pos, frame);
         } else {
             self.prepend(pos, FrameItem::Group(GroupItem::new(frame)));
+        }
+    }
+
+    pub fn add_align_point(
+        &mut self,
+        pos: Point,
+        id: AlignPointId,
+        horizontal: bool,
+        vertical: bool,
+    ) {
+        // TODO: use some small hashmap to store align points.
+        if let Some(k) = self.align_points.iter().position(|p| p.1 == id) {
+            self.align_points[k].0 = pos;
+            self.align_points[k].2 = horizontal;
+            self.align_points[k].3 = vertical;
+        } else {
+            self.align_points.push((pos, id, horizontal, vertical));
         }
     }
 
@@ -262,6 +351,33 @@ impl Frame {
             }
         }
     }
+
+    fn take_frame_align_points(&mut self, point: Point, frame: &mut Frame) {
+        // Optimize for usual simple cases.
+        if !frame.align_points.is_empty() {
+            if self.align_points.is_empty() {
+                self.align_points = std::mem::take(&mut frame.align_points);
+                self.align_points.iter_mut().for_each(|(pos, ..)| *pos += point);
+            } else {
+                for (pos, id, horizontal, vertical) in frame.align_points.drain(..) {
+                    self.add_align_point(point + pos, id, horizontal, vertical);
+                }
+            }
+        }
+    }
+
+    fn take_item_align_points(&mut self, point: Point, item: &mut FrameItem) {
+        match item {
+            FrameItem::Group(item) => {
+                self.take_frame_align_points(point, &mut item.frame);
+            }
+            FrameItem::Text(..)
+            | FrameItem::Shape(..)
+            | FrameItem::Image(..)
+            | FrameItem::Link(..)
+            | FrameItem::Tag(..) => (),
+        }
+    }
 }
 
 /// Modify the frame.
@@ -273,6 +389,7 @@ impl Frame {
         } else {
             self.items = Arc::new(LazyHash::new(vec![]));
         }
+        self.align_points.clear();
     }
 
     /// Adjust the frame's size, translate the original content by an offset
@@ -296,6 +413,9 @@ impl Frame {
                 *baseline += offset.y;
             }
             for (point, _) in Arc::make_mut(&mut self.items).iter_mut() {
+                *point += offset;
+            }
+            for (point, ..) in self.align_points.iter_mut() {
                 *point += offset;
             }
         }
