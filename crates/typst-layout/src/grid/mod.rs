@@ -1,8 +1,10 @@
+mod cell_infos;
 mod layouter;
 mod lines;
 mod repeated;
 mod rowspans;
 
+pub use self::cell_infos::GridInfos;
 pub use self::layouter::GridLayouter;
 
 use typst_library::diag::SourceResult;
