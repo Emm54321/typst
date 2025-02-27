@@ -9,7 +9,7 @@ use typst_library::layout::{
 use typst_syntax::Span;
 use typst_utils::{Get, Numeric};
 
-use crate::align_points::AlignPointsEngine;
+use crate::align_engine::AlignmentEngine;
 
 /// Layout the stack.
 #[typst_macros::time(span = elem.span())]
@@ -214,8 +214,8 @@ impl<'a> StackLayouter<'a> {
     /// Advance to the next region.
     fn finish_region(&mut self) -> SourceResult<()> {
         // Compute align points positions.
-        let mut align_points_engine = AlignPointsEngine::new(1, false);
-        align_points_engine.set_min_zone_size(0, self.used.cross);
+        let mut align_engine = AlignmentEngine::new(1, false);
+        align_engine.set_min_zone_size(0, self.used.cross);
         for item in &self.items {
             if let StackItem::Frame(frame, _align) = item {
                 let mut ref_point: Option<(&AlignPointId, Abs)> = None;
@@ -225,14 +225,9 @@ impl<'a> StackLayouter<'a> {
                         Axis::Y => (point.x, frame.width(), *horizontal),
                     };
                     if usable {
-                        align_points_engine.add_point(
-                            id.clone(),
-                            0..1,
-                            offset,
-                            size - offset,
-                        );
+                        align_engine.add_point(id.clone(), 0..1, offset, size - offset);
                         if let Some((id1, offset1)) = ref_point {
-                            align_points_engine.add_relation(
+                            align_engine.add_relation(
                                 id1.clone(),
                                 id.clone(),
                                 offset - offset1,
@@ -245,8 +240,8 @@ impl<'a> StackLayouter<'a> {
             }
         }
 
-        align_points_engine.compute_positions();
-        self.used.cross = align_points_engine.get_zone_size(0);
+        let align_infos = align_engine.compute();
+        self.used.cross = align_infos.get_zone_size(0);
 
         // Determine the size of the stack in this region depending on whether
         // the region expands.
@@ -305,10 +300,9 @@ impl<'a> StackLayouter<'a> {
                             Axis::Y => (*horizontal, point.x),
                         };
                         if usable {
-                            let position = align_points_engine.get_position(id);
+                            let position = align_infos.get_position(id);
                             delta = position - offset;
-                            pt_extra_size
-                                .set_min(align_points_engine.get_extra_space(id));
+                            pt_extra_size.set_min(align_infos.get_extra_space(id));
                         }
                     }
                     if pt_extra_size.is_finite() {
