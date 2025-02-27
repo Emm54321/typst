@@ -23,12 +23,19 @@ macro_rules! debug {
 // TODO: optimize for the usual case of inline layout: 1 zone, 1 align point (baseline).
 
 #[derive(Debug, Default)]
-pub struct AlignPointsEngine {
+pub struct AlignmentEngine {
     id_to_node: HashMap<AlignPointId, usize>,
     nodes: Vec<Node>,
     requirements: Vec<HashSet<usize>>,
     groups: Vec<GroupInfo>,
     is_rtl: bool,
+}
+
+#[derive(Debug)]
+pub struct AlignmentInfos {
+    id_to_node: HashMap<AlignPointId, usize>,
+    nodes: Vec<Node>,
+    groups: Vec<GroupInfo>,
 }
 
 enum NodeType {
@@ -82,7 +89,7 @@ impl GroupInfo {
     }
 }
 
-impl AlignPointsEngine {
+impl AlignmentEngine {
     pub fn new(zones: usize, is_rtl: bool) -> Self {
         let mut nodes = Vec::with_capacity(zones + 8);
         let mut groups = Vec::with_capacity(zones + 8);
@@ -216,7 +223,7 @@ impl AlignPointsEngine {
         self.id_to_node.is_empty()
     }
 
-    pub fn compute_positions(&mut self) {
+    pub fn compute(mut self) -> AlignmentInfos {
         if !self.is_empty() {
             debugln!("compute:");
             debugln!("{:?}", self.relations());
@@ -240,7 +247,7 @@ impl AlignPointsEngine {
         debugln!("Remaining requirements: {:?}", self.requirements);
         if order.len() != self.nodes.len() {
             debugln!("Circular dependencies.");
-            return;
+            return self.into_alignment_infos();
         }
 
         for k in 0..self.groups.len() {
@@ -305,12 +312,41 @@ impl AlignPointsEngine {
                 for (node, &p) in self.nodes.iter_mut().zip(&positions) {
                     node.position = p;
                 }
-                return;
+                return self.into_alignment_infos();
             }
         }
         debugln!("Can't compute positions.");
+        return self.into_alignment_infos();
     }
 
+    fn into_alignment_infos(self) -> AlignmentInfos {
+        AlignmentInfos {
+            id_to_node: self.id_to_node,
+            nodes: self.nodes,
+            groups: self.groups,
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn relations(&self) -> impl '_ + std::fmt::Debug {
+        struct Relations<'a>(&'a AlignmentEngine);
+        impl std::fmt::Debug for Relations<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                for node in &self.0.nodes {
+                    write!(f, "{:?}:", node.ty)?;
+                    for (&k, rel) in &node.edges {
+                        write!(f, " {:?}:{rel:?}", self.0.nodes[k].ty)?;
+                    }
+                    writeln!(f)?;
+                }
+                Ok(())
+            }
+        }
+        Relations(self)
+    }
+}
+
+impl AlignmentInfos {
     pub fn get_position(&self, id: &AlignPointId) -> Abs {
         let k = self.id_to_node[id];
         self.nodes[k].position
@@ -344,26 +380,8 @@ impl AlignPointsEngine {
     }
 
     #[cfg(debug_assertions)]
-    pub fn relations(&self) -> impl '_ + std::fmt::Debug {
-        struct Relations<'a>(&'a AlignPointsEngine);
-        impl std::fmt::Debug for Relations<'_> {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                for node in &self.0.nodes {
-                    write!(f, "{:?}:", node.ty)?;
-                    for (&k, rel) in &node.edges {
-                        write!(f, " {:?}:{rel:?}", self.0.nodes[k].ty)?;
-                    }
-                    writeln!(f)?;
-                }
-                Ok(())
-            }
-        }
-        Relations(self)
-    }
-
-    #[cfg(debug_assertions)]
     pub fn positions(&self) -> impl '_ + std::fmt::Debug {
-        struct Positions<'a>(&'a AlignPointsEngine);
+        struct Positions<'a>(&'a AlignmentInfos);
         impl std::fmt::Debug for Positions<'_> {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 let mut a = self
