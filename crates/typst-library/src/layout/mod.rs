@@ -2,6 +2,7 @@
 
 mod abs;
 mod align;
+mod align_point;
 mod angle;
 mod axes;
 mod columns;
@@ -35,6 +36,7 @@ mod transform;
 
 pub use self::abs::*;
 pub use self::align::*;
+pub use self::align_point::*;
 pub use self::angle::*;
 pub use self::axes::*;
 pub use self::columns::*;
@@ -88,6 +90,7 @@ pub fn define(global: &mut Scope) {
     global.define_elem::<ColbreakElem>();
     global.define_elem::<PlaceElem>();
     global.define_elem::<AlignElem>();
+    global.define_elem::<AlignPointElem>();
     global.define_elem::<PadElem>();
     global.define_elem::<RepeatElem>();
     global.define_elem::<MoveElem>();
