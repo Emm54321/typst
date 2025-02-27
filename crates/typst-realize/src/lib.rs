@@ -21,7 +21,7 @@ use typst_library::foundations::{
 use typst_library::html::{tag, HtmlElem};
 use typst_library::introspection::{Locatable, SplitLocator, Tag, TagElem};
 use typst_library::layout::{
-    AlignElem, BoxElem, HElem, InlineElem, PageElem, PagebreakElem, VElem,
+    AlignElem, AlignPointElem, BoxElem, HElem, InlineElem, PageElem, PagebreakElem, VElem,
 };
 use typst_library::math::{EquationElem, Mathy};
 use typst_library::model::{
@@ -884,6 +884,7 @@ static PAR: GroupingRule = GroupingRule {
             || elem == SmartQuoteElem::elem()
             || elem == InlineElem::elem()
             || elem == BoxElem::elem()
+            || elem == AlignPointElem::elem()
             || (kind.is_html()
                 && content
                     .to_packed::<HtmlElem>()
