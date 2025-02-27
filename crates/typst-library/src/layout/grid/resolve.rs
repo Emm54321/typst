@@ -7,11 +7,12 @@ use typst_library::diag::{
     bail, At, Hint, HintedStrResult, HintedString, SourceResult, Trace, Tracepoint,
 };
 use typst_library::engine::Engine;
-use typst_library::foundations::{Content, Fold, Packed, Smart, StyleChain};
+use typst_library::foundations::{Content, Fold, Packed, Resolve, Smart, StyleChain};
 use typst_library::introspection::Locator;
 use typst_library::layout::{
-    Abs, Alignment, Axes, Celled, GridCell, GridChild, GridElem, GridItem, Length,
-    OuterHAlignment, OuterVAlignment, Rel, ResolvedCelled, Sides, Sizing,
+    Abs, Alignment, Axes, Celled, FixedAlignment, GridCell, GridChild, GridElem,
+    GridItem, Length, OuterHAlignment, OuterVAlignment, Rel, ResolvedCelled, Sides,
+    Sizing,
 };
 use typst_library::model::{TableCell, TableChild, TableElem, TableItem};
 use typst_library::text::TextElem;
@@ -241,7 +242,7 @@ impl ResolvableCell for Packed<TableCell> {
         cell.push_x(Smart::Custom(x));
         cell.push_y(Smart::Custom(y));
         cell.push_fill(Smart::Custom(fill.clone()));
-        cell.push_align(match align {
+        let align = match align {
             Smart::Custom(align) => {
                 Smart::Custom(cell.align(styles).map_or(align, |inner| inner.fold(align)))
             }
@@ -249,7 +250,9 @@ impl ResolvableCell for Packed<TableCell> {
             // cell's alignment instead (which, in the end, will fold with
             // the outer alignment when it is effectively displayed).
             Smart::Auto => cell.align(styles),
-        });
+        };
+        cell.push_align(align);
+        let align = align.resolve(styles).unwrap_or(Axes::splat(FixedAlignment::Start)); //FIXME
         cell.push_inset(Smart::Custom(
             cell.inset(styles).map_or(inset, |inner| inner.fold(inset)),
         ));
@@ -273,6 +276,7 @@ impl ResolvableCell for Packed<TableCell> {
             fill,
             colspan,
             rowspan,
+            align,
             stroke,
             stroke_overridden,
             breakable,
@@ -336,15 +340,17 @@ impl ResolvableCell for Packed<GridCell> {
         cell.push_x(Smart::Custom(x));
         cell.push_y(Smart::Custom(y));
         cell.push_fill(Smart::Custom(fill.clone()));
-        cell.push_align(match align {
+        let align = match align {
             Smart::Custom(align) => {
                 Smart::Custom(cell.align(styles).map_or(align, |inner| inner.fold(align)))
             }
-            // Don't fold if the grid is using outer alignment. Use the
+            // Don't fold if the table is using outer alignment. Use the
             // cell's alignment instead (which, in the end, will fold with
             // the outer alignment when it is effectively displayed).
             Smart::Auto => cell.align(styles),
-        });
+        };
+        cell.push_align(align);
+        let align = align.resolve(styles).unwrap_or(Axes::splat(FixedAlignment::Start)); //FIXME
         cell.push_inset(Smart::Custom(
             cell.inset(styles).map_or(inset, |inner| inner.fold(inset)),
         ));
@@ -368,6 +374,7 @@ impl ResolvableCell for Packed<GridCell> {
             fill,
             colspan,
             rowspan,
+            align,
             stroke,
             stroke_overridden,
             breakable,
@@ -585,6 +592,8 @@ pub struct Cell<'a> {
     pub colspan: NonZeroUsize,
     /// The amount of rows spanned by the cell.
     pub rowspan: NonZeroUsize,
+    /// The cell alignment.
+    pub align: Axes<FixedAlignment>,
     /// The cell's stroke.
     ///
     /// We use an Arc to avoid unnecessary space usage when all sides are the
@@ -613,6 +622,7 @@ impl<'a> Cell<'a> {
             fill: None,
             colspan: NonZeroUsize::ONE,
             rowspan: NonZeroUsize::ONE,
+            align: Axes::new(FixedAlignment::Start, FixedAlignment::Start),
             stroke: Sides::splat(None),
             stroke_overridden: Sides::splat(false),
             breakable: true,

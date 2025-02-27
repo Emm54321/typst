@@ -3,11 +3,13 @@ use typst_library::engine::Engine;
 use typst_library::foundations::{Content, Packed, Resolve, StyleChain, StyledElem};
 use typst_library::introspection::{Locator, SplitLocator};
 use typst_library::layout::{
-    Abs, AlignElem, Axes, Axis, Dir, FixedAlignment, Fr, Fragment, Frame, HElem, Point,
-    Regions, Size, Spacing, StackChild, StackElem, VElem,
+    Abs, AlignElem, AlignPointId, Axes, Axis, Dir, FixedAlignment, Fr, Fragment, Frame,
+    HElem, Point, Regions, Size, Spacing, StackChild, StackElem, VElem,
 };
 use typst_syntax::Span;
 use typst_utils::{Get, Numeric};
+
+use crate::align_points::AlignPointsEngine;
 
 /// Layout the stack.
 #[typst_macros::time(span = elem.span())]
@@ -211,6 +213,41 @@ impl<'a> StackLayouter<'a> {
 
     /// Advance to the next region.
     fn finish_region(&mut self) -> SourceResult<()> {
+        // Compute align points positions.
+        let mut align_points_engine = AlignPointsEngine::new(1, false);
+        align_points_engine.set_min_zone_size(0, self.used.cross);
+        for item in &self.items {
+            if let StackItem::Frame(frame, _align) = item {
+                let mut ref_point: Option<(&AlignPointId, Abs)> = None;
+                for (point, id, horizontal, vertical) in frame.align_points() {
+                    let (offset, size, usable) = match self.axis {
+                        Axis::X => (point.y, frame.height(), *vertical),
+                        Axis::Y => (point.x, frame.width(), *horizontal),
+                    };
+                    if usable {
+                        align_points_engine.add_point(
+                            id.clone(),
+                            0..1,
+                            offset,
+                            size - offset,
+                        );
+                        if let Some((id1, offset1)) = ref_point {
+                            align_points_engine.add_relation(
+                                id1.clone(),
+                                id.clone(),
+                                offset - offset1,
+                            );
+                        } else {
+                            ref_point = Some((id, offset));
+                        }
+                    }
+                }
+            }
+        }
+
+        align_points_engine.compute_positions();
+        self.used.cross = align_points_engine.get_zone_size(0);
+
         // Determine the size of the stack in this region depending on whether
         // the region expands.
         let mut size = self
@@ -233,6 +270,7 @@ impl<'a> StackLayouter<'a> {
         let mut output = Frame::hard(size);
         let mut cursor = Abs::zero();
         let mut ruler: FixedAlignment = self.dir.start().into();
+        let other = self.axis.other();
 
         // Place all frames.
         for item in self.items.drain(..) {
@@ -257,10 +295,26 @@ impl<'a> StackLayouter<'a> {
                         };
 
                     // Align along the cross axis.
-                    let other = self.axis.other();
-                    let cross = align
-                        .get(other)
-                        .position(size.get(other) - frame.size().get(other));
+                    let mut delta = Abs::zero();
+                    let frame_size = frame.size().get(other);
+                    let mut extra_size = size.get(other) - frame_size;
+                    let mut pt_extra_size = Abs::inf();
+                    for (point, id, horizontal, vertical) in frame.align_points() {
+                        let (usable, offset) = match self.axis {
+                            Axis::X => (*vertical, point.y),
+                            Axis::Y => (*horizontal, point.x),
+                        };
+                        if usable {
+                            let position = align_points_engine.get_position(id);
+                            delta = position - offset;
+                            pt_extra_size
+                                .set_min(align_points_engine.get_extra_space(id));
+                        }
+                    }
+                    if pt_extra_size.is_finite() {
+                        extra_size = -(self.used.cross - size.get(other));
+                    }
+                    let cross = align.get(other).position(extra_size) + delta;
 
                     let pos = GenericSize::new(cross, main).to_point(self.axis);
                     cursor += child;
