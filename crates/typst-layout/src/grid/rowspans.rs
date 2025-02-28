@@ -85,7 +85,7 @@ pub struct CellMeasurementData<'layouter> {
     pub frames_in_previous_regions: usize,
 }
 
-impl<'a> GridLayouter<'a> {
+impl GridLayouter<'_> {
     /// Layout a rowspan over the already finished regions, plus the current
     /// region's frame and resolved rows, if it wasn't finished yet (because
     /// we're being called from `finish_region`, but note that this function is
@@ -375,7 +375,7 @@ impl<'a> GridLayouter<'a> {
         cell: &Cell,
         breakable: bool,
         row_group_data: Option<&UnbreakableRowGroup>,
-    ) -> CellMeasurementData<'a> {
+    ) -> CellMeasurementData<'_> {
         let rowspan = self.grid.effective_rowspan_of_cell(cell);
 
         // This variable is used to construct a custom backlog if the cell
