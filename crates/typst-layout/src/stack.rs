@@ -265,7 +265,6 @@ impl<'a> StackLayouter<'a> {
         let mut output = Frame::hard(size);
         let mut cursor = Abs::zero();
         let mut ruler: FixedAlignment = self.dir.start().into();
-        let other = self.axis.other();
 
         // Place all frames.
         for item in self.items.drain(..) {
@@ -290,10 +289,11 @@ impl<'a> StackLayouter<'a> {
                         };
 
                     // Align along the cross axis.
-                    let mut delta = Abs::zero();
+                    let other = self.axis.other();
                     let frame_size = frame.size().get(other);
                     let mut extra_size = size.get(other) - frame_size;
                     let mut pt_extra_size = Abs::inf();
+                    let mut delta = Abs::zero();
                     for (point, id, horizontal, vertical) in frame.align_points() {
                         let (usable, offset) = match self.axis {
                             Axis::X => (*vertical, point.y),

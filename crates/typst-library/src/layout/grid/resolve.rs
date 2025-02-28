@@ -344,7 +344,7 @@ impl ResolvableCell for Packed<GridCell> {
             Smart::Custom(align) => {
                 Smart::Custom(cell.align(styles).map_or(align, |inner| inner.fold(align)))
             }
-            // Don't fold if the table is using outer alignment. Use the
+            // Don't fold if the grid is using outer alignment. Use the
             // cell's alignment instead (which, in the end, will fold with
             // the outer alignment when it is effectively displayed).
             Smart::Auto => cell.align(styles),
