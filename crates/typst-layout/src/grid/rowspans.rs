@@ -5,7 +5,7 @@ use typst_library::layout::grid::resolve::Repeatable;
 use typst_library::layout::{Abs, Axes, Frame, Point, Region, Regions, Size, Sizing};
 
 use super::layouter::{in_last_with_offset, points, Row, RowPiece};
-use super::{Cell, GridInfos, GridLayouter};
+use super::{layout_cell, Cell, GridLayouter};
 
 /// All information needed to layout a single rowspan.
 pub struct Rowspan {
@@ -103,7 +103,6 @@ impl<'a> GridLayouter<'a> {
         rowspan_data: Rowspan,
         current_region_data: Option<(&mut Frame, &[RowPiece])>,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
     ) -> SourceResult<()> {
         let Rowspan {
             x,
@@ -146,15 +145,7 @@ impl<'a> GridLayouter<'a> {
         }
 
         // Push the layouted frames directly into the finished frames.
-        let (fragment, _align) = grid_infos.layout_cell(
-            engine,
-            cell,
-            x,
-            y,
-            disambiguator,
-            self.styles,
-            pod,
-        )?;
+        let fragment = layout_cell(cell, engine, disambiguator, self.styles, pod)?;
         let (current_region, current_rrows) = current_region_data.unzip();
         for ((i, finished), frame) in self
             .finished
@@ -234,7 +225,6 @@ impl<'a> GridLayouter<'a> {
         &mut self,
         current_row: usize,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
     ) -> SourceResult<()> {
         if self.unbreakable_rows_left == 0 {
             // By default, the amount of unbreakable rows starting at the
@@ -259,7 +249,6 @@ impl<'a> GridLayouter<'a> {
                 amount_unbreakable_rows,
                 &self.regions,
                 engine,
-                grid_infos,
                 0,
             )?;
 
@@ -270,7 +259,7 @@ impl<'a> GridLayouter<'a> {
                     self.header_height + self.footer_height,
                 )
             {
-                self.finish_region(engine, grid_infos, false)?;
+                self.finish_region(engine, false)?;
             }
 
             // Update unbreakable rows left.
@@ -311,7 +300,6 @@ impl<'a> GridLayouter<'a> {
         amount_unbreakable_rows: Option<usize>,
         regions: &Regions<'_>,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
         disambiguator: usize,
     ) -> SourceResult<UnbreakableRowGroup> {
         let mut row_group = UnbreakableRowGroup::default();
@@ -341,7 +329,6 @@ impl<'a> GridLayouter<'a> {
                 Sizing::Auto => self
                     .measure_auto_row(
                         engine,
-                        grid_infos,
                         disambiguator,
                         y,
                         false,
@@ -691,7 +678,6 @@ impl<'a> GridLayouter<'a> {
         row_group_data: Option<&UnbreakableRowGroup>,
         mut disambiguator: usize,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
     ) -> SourceResult<()> {
         // To begin our simulation, we have to unify the sizes demanded by
         // each rowspan into one simple vector of sizes, as if they were
@@ -775,7 +761,6 @@ impl<'a> GridLayouter<'a> {
             simulated_regions,
             &mut simulated_sizes,
             engine,
-            grid_infos,
             last_resolved_size,
             unbreakable_rows_left,
             disambiguator,
@@ -867,7 +852,6 @@ impl<'a> GridLayouter<'a> {
         mut simulated_regions: Regions<'_>,
         simulated_sizes: &mut Vec<Abs>,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
         last_resolved_size: Option<Abs>,
         unbreakable_rows_left: usize,
         mut disambiguator: usize,
@@ -907,7 +891,6 @@ impl<'a> GridLayouter<'a> {
                 unbreakable_rows_left,
                 self,
                 engine,
-                grid_infos,
             )?;
 
             // If the total height spanned by upcoming spanned rows plus the
@@ -1042,7 +1025,6 @@ impl<'a> RowspanSimulator<'a> {
         mut unbreakable_rows_left: usize,
         layouter: &GridLayouter<'_>,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
     ) -> SourceResult<Abs> {
         let spanned_rows = &layouter.grid.rows[y + 1..=max_spanned_row];
         for (offset, row) in spanned_rows.iter().enumerate() {
@@ -1068,7 +1050,6 @@ impl<'a> RowspanSimulator<'a> {
                     None,
                     &self.regions,
                     engine,
-                    grid_infos,
                     0,
                 )?;
                 while !self.regions.size.y.fits(row_group.height)
@@ -1077,7 +1058,7 @@ impl<'a> RowspanSimulator<'a> {
                         self.header_height + self.footer_height,
                     )
                 {
-                    self.finish_region(layouter, engine, grid_infos)?;
+                    self.finish_region(layouter, engine)?;
                 }
 
                 unbreakable_rows_left = row_group.rows.len();
@@ -1102,7 +1083,7 @@ impl<'a> RowspanSimulator<'a> {
                             self.header_height + self.footer_height,
                         )
                     {
-                        self.finish_region(layouter, engine, grid_infos)?;
+                        self.finish_region(layouter, engine)?;
 
                         skipped_region = true;
                     }
@@ -1136,7 +1117,6 @@ impl<'a> RowspanSimulator<'a> {
         &mut self,
         layouter: &GridLayouter<'_>,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
     ) -> SourceResult<()> {
         // We can't just use the initial header/footer height on each region,
         // because header/footer height might vary depending on region size if
@@ -1150,13 +1130,7 @@ impl<'a> RowspanSimulator<'a> {
         let header_height =
             if let Some(Repeatable::Repeated(header)) = &layouter.grid.header {
                 layouter
-                    .simulate_header(
-                        header,
-                        &self.regions,
-                        engine,
-                        grid_infos,
-                        disambiguator,
-                    )?
+                    .simulate_header(header, &self.regions, engine, disambiguator)?
                     .height
             } else {
                 Abs::zero()
@@ -1165,13 +1139,7 @@ impl<'a> RowspanSimulator<'a> {
         let footer_height =
             if let Some(Repeatable::Repeated(footer)) = &layouter.grid.footer {
                 layouter
-                    .simulate_footer(
-                        footer,
-                        &self.regions,
-                        engine,
-                        grid_infos,
-                        disambiguator,
-                    )?
+                    .simulate_footer(footer, &self.regions, engine, disambiguator)?
                     .height
             } else {
                 Abs::zero()
@@ -1193,13 +1161,7 @@ impl<'a> RowspanSimulator<'a> {
                 // Simulate headers again, at the new region, as
                 // the full region height may change.
                 layouter
-                    .simulate_header(
-                        header,
-                        &self.regions,
-                        engine,
-                        grid_infos,
-                        disambiguator,
-                    )?
+                    .simulate_header(header, &self.regions, engine, disambiguator)?
                     .height
             } else {
                 header_height
@@ -1211,13 +1173,7 @@ impl<'a> RowspanSimulator<'a> {
                 // Simulate footers again, at the new region, as
                 // the full region height may change.
                 layouter
-                    .simulate_footer(
-                        footer,
-                        &self.regions,
-                        engine,
-                        grid_infos,
-                        disambiguator,
-                    )?
+                    .simulate_footer(footer, &self.regions, engine, disambiguator)?
                     .height
             } else {
                 footer_height
@@ -1237,7 +1193,6 @@ impl<'a> RowspanSimulator<'a> {
         &mut self,
         layouter: &GridLayouter<'_>,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
     ) -> SourceResult<()> {
         // If a row was pushed to the next region, the immediately
         // preceding gutter row is removed.
@@ -1246,7 +1201,7 @@ impl<'a> RowspanSimulator<'a> {
         self.regions.next();
         self.finished += 1;
 
-        self.simulate_header_footer_layout(layouter, engine, grid_infos)
+        self.simulate_header_footer_layout(layouter, engine)
     }
 }
 
