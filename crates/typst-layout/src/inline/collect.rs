@@ -2,8 +2,8 @@ use typst_library::diag::warning;
 use typst_library::foundations::{Packed, Resolve, Str};
 use typst_library::introspection::{SplitLocator, Tag, TagElem};
 use typst_library::layout::{
-    Abs, AlignElem, AlignPointElem, BoxElem, Dir, Fr, Frame, HElem, InlineElem,
-    InlineItem, Sizing, Spacing,
+    Abs, AlignPointElem, BoxElem, Dir, Fr, Frame, HElem, InlineElem, InlineItem, Sizing,
+    Spacing,
 };
 use typst_library::routines::Pair;
 use typst_library::text::{

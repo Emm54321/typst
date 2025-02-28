@@ -316,7 +316,7 @@ impl AlignmentEngine {
             }
         }
         debugln!("Can't compute positions.");
-        return self.into_alignment_infos();
+        self.into_alignment_infos()
     }
 
     fn into_alignment_infos(self) -> AlignmentInfos {

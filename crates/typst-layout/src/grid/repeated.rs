@@ -7,7 +7,6 @@ use typst_library::layout::{Abs, Axes, Frame, Regions};
 
 use super::layouter::{GridLayouter, RowState};
 use super::rowspans::UnbreakableRowGroup;
-use super::GridInfos;
 
 impl<'a> GridLayouter<'a> {
     /// Checks whether a region break could help a situation where we're out of
@@ -131,7 +130,6 @@ impl<'a> GridLayouter<'a> {
         &mut self,
         header: &Header,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
         disambiguator: usize,
         as_short_lived: bool,
     ) -> SourceResult<Abs> {
@@ -449,7 +447,6 @@ impl<'a> GridLayouter<'a> {
         header: &Header,
         regions: &Regions<'_>,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
         disambiguator: usize,
     ) -> SourceResult<UnbreakableRowGroup> {
         // Note that we assume the invariant that any rowspan in a header is
@@ -462,7 +459,6 @@ impl<'a> GridLayouter<'a> {
             Some(header.range.end - header.range.start),
             regions,
             engine,
-            grid_infos,
             disambiguator,
         )
     }
@@ -472,11 +468,10 @@ impl<'a> GridLayouter<'a> {
         &mut self,
         footer: &Footer,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
         disambiguator: usize,
     ) -> SourceResult<()> {
         let footer_height = self
-            .simulate_footer(footer, &self.regions, engine, grid_infos, disambiguator)?
+            .simulate_footer(footer, &self.regions, engine, disambiguator)?
             .height;
         let mut skipped_region = false;
         while self.unbreakable_rows_left == 0
@@ -503,14 +498,8 @@ impl<'a> GridLayouter<'a> {
         self.current.footer_height = if skipped_region {
             // Simulate the footer again; the region's 'full' might have
             // changed.
-            self.simulate_footer(
-                footer,
-                &self.regions,
-                engine,
-                grid_infos,
-                disambiguator,
-            )?
-            .height
+            self.simulate_footer(footer, &self.regions, engine, disambiguator)?
+                .height
         } else {
             footer_height
         };
@@ -524,7 +513,6 @@ impl<'a> GridLayouter<'a> {
         &mut self,
         footer: &Footer,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
         disambiguator: usize,
     ) -> SourceResult<()> {
         // Ensure footer rows have their own height available.
@@ -540,7 +528,6 @@ impl<'a> GridLayouter<'a> {
             self.layout_row_with_state(
                 y,
                 engine,
-                grid_infos,
                 disambiguator,
                 RowState {
                     in_active_repeatable: repeats,
@@ -558,7 +545,6 @@ impl<'a> GridLayouter<'a> {
         footer: &Footer,
         regions: &Regions<'_>,
         engine: &mut Engine,
-        grid_infos: &mut GridInfos,
         disambiguator: usize,
     ) -> SourceResult<UnbreakableRowGroup> {
         // Note that we assume the invariant that any rowspan in a footer is
@@ -571,7 +557,6 @@ impl<'a> GridLayouter<'a> {
             Some(footer.end - footer.start),
             regions,
             engine,
-            grid_infos,
             disambiguator,
         )
     }
