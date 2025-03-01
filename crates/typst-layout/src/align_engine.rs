@@ -81,11 +81,12 @@ impl std::fmt::Debug for Relation {
 struct GroupInfo {
     parent: usize,
     depth: usize,
+    extra_space: Abs,
 }
 
 impl GroupInfo {
     fn new(k: usize) -> Self {
-        Self { parent: k, depth: 0 }
+        Self { parent: k, depth: 0, extra_space: Abs::inf() }
     }
 }
 
@@ -133,7 +134,11 @@ impl AlignmentEngine {
                     position: Abs::zero(),
                     edges: Default::default(),
                 });
-                self.groups.push(GroupInfo { parent: k, depth: 0 });
+                self.groups.push(GroupInfo {
+                    parent: k,
+                    depth: 0,
+                    extra_space: Abs::inf(),
+                });
                 self.requirements.push(Default::default());
                 k
             }
@@ -149,11 +154,14 @@ impl AlignmentEngine {
         &mut self,
         parent: AlignPointId,
         child: AlignPointId,
-        delta: Abs,
+        mut delta: Abs,
     ) {
         debugln!("add relation: {parent:?} to {child:?} >= {:.2}", delta.to_mm());
         let i = self.id_to_node[&parent];
         let j = self.id_to_node[&child];
+        if self.is_rtl {
+            delta = -delta;
+        }
         if delta >= Abs::zero() {
             self.add_edge(i, j, delta, delta);
         } else {
@@ -319,7 +327,27 @@ impl AlignmentEngine {
         self.into_alignment_infos()
     }
 
-    fn into_alignment_infos(self) -> AlignmentInfos {
+    fn into_alignment_infos(mut self) -> AlignmentInfos {
+        for (k, node) in self.nodes.iter().enumerate() {
+            let g = self.groups[k].parent;
+            for (&target, relation) in &node.edges {
+                if self.groups[target].parent != g {
+                    self.groups[g].extra_space.set_min(
+                        self.nodes[target].position - node.position - relation.min_offset,
+                    );
+                }
+            }
+        }
+        if self.is_rtl {
+            let n = self.nodes.len() - self.id_to_node.len();
+            for (k, node) in self.nodes.iter_mut().enumerate().skip(n) {
+                node.position += self.groups[self.groups[k].parent].extra_space;
+            }
+            let w = self.nodes[self.nodes.len() - self.id_to_node.len() - 1].position;
+            for node in &mut self.nodes {
+                node.position = w - node.position
+            }
+        }
         AlignmentInfos {
             id_to_node: self.id_to_node,
             nodes: self.nodes,
@@ -357,26 +385,28 @@ impl AlignmentInfos {
     }
 
     pub fn get_zone_size(&self, zone: usize) -> Abs {
-        self.nodes[zone + 1].position - self.nodes[zone].position
+        // Use abs() for rtl.
+        (self.nodes[zone + 1].position - self.nodes[zone].position).abs()
     }
 
     pub fn get_extra_space(&self, id: &AlignPointId) -> Abs {
         let k = self.id_to_node[id];
-        let mut extra_right = Abs::inf();
         let g = self.groups[k].parent;
-        for (node, group) in self.nodes.iter().zip(&self.groups) {
-            if group.parent == g {
-                let p = node.position;
-                for (&target, relation) in &node.edges {
-                    if self.groups[target].parent != g {
-                        extra_right.set_min(
-                            (self.nodes[target].position - p) - relation.min_offset,
-                        );
-                    }
-                }
-            }
-        }
-        extra_right
+        self.groups[g].extra_space
+        //let mut extra_right = Abs::inf();
+        //for (node, group) in self.nodes.iter().zip(&self.groups) {
+        //    if group.parent == g {
+        //        let p = node.position;
+        //        for (&target, relation) in &node.edges {
+        //            if self.groups[target].parent != g {
+        //                extra_right.set_min(
+        //                    (self.nodes[target].position - p) - relation.min_offset,
+        //                );
+        //            }
+        //        }
+        //    }
+        //}
+        //extra_right
     }
 
     #[cfg(debug_assertions)]
