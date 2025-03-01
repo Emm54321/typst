@@ -1543,22 +1543,18 @@ impl<'a> GridLayouter<'a> {
                         }
                     }
 
-                    let align_engine = self.horiz_align.as_ref().unwrap();
+                    let align_infos = self.horiz_align.as_ref().unwrap();
                     let mut dx = if self.is_rtl {
                         let colspan = self.grid.effective_colspan_of_cell(cell);
-                        self.width - align_engine.get_zone_position(x + colspan)
+                        align_infos.get_zone_position(x + colspan)
                     } else {
-                        align_engine.get_zone_position(x)
+                        align_infos.get_zone_position(x)
                     };
-                    let mut dw = width - frame.width();
-                    let mut pos = Point::zero();
                     if let Some((point_x, id)) = frame.horizontal_align_points().next() {
-                        let position = align_engine.get_position(id);
-                        dx = position - point_x;
-                        dw = align_engine.get_extra_space(id);
+                        dx = align_infos.get_position(id) - point_x
+                            + cell.align.x.position(align_infos.get_extra_space(id));
                     }
-                    pos.x = dx + cell.align.x.position(dw);
-                    frames.push((pos, frame, cell.align.y));
+                    frames.push((Point::new(dx, Abs::zero()), frame, cell.align.y));
                 }
             }
         }
