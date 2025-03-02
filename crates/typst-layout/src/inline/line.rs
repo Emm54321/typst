@@ -573,16 +573,37 @@ pub fn commit(
                 ref_point = Some((id, point_y));
             }
         }
-        // If there is no align point, assume there is one on the baseline.
-        if ref_point.is_none() {
-            align_engine.add_point(
-                baseline_point.clone(),
-                0..1,
-                frame.baseline(),
-                frame.height() - frame.baseline(),
-            );
+    }
+
+    // Frames that are not linked to the baseline in any way, must be linked to the baseline now.
+    // If several frames are linked together but not tied to the baseline, the first one will be
+    // aligned on the baseline and the others will be aligned through the first one.
+    for (_offset, frame) in &frames {
+        let mut linked = false;
+        for (_, id) in frame.vertical_align_points() {
+            if align_engine.is_same_group(id, &baseline_point) {
+                linked = true;
+                break;
+            }
+        }
+        if !linked {
+            if let Some((point_y, id)) = frame.vertical_align_points().next() {
+                align_engine.add_relation(
+                    baseline_point.clone(),
+                    id.clone(),
+                    point_y - frame.baseline(),
+                );
+            } else {
+                align_engine.add_point(
+                    baseline_point.clone(),
+                    0..1,
+                    frame.baseline(),
+                    frame.height() - frame.baseline(),
+                );
+            }
         }
     }
+
     let align_infos = align_engine.compute();
 
     let top = align_infos.get_position(&baseline_point);
