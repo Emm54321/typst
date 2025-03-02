@@ -11,9 +11,16 @@ macro_rules! debugln {
     };
 }
 
+#[allow(unused)]
 macro_rules! debug {
     ($($t:tt)*) => {
         //print!($($t)*)
+    };
+}
+
+macro_rules! debug_block {
+    ($($t:tt)*) => {
+        //$($t)*
     };
 }
 
@@ -196,6 +203,19 @@ impl AlignmentEngine {
         }
     }
 
+    fn flatten_groups(&mut self) {
+        for k in 0..self.groups.len() {
+            self.groups[k].parent = self.find_group(k);
+            self.groups[k].depth = 1;
+        }
+    }
+
+    pub fn is_same_group(&self, id1: &AlignPointId, id2: &AlignPointId) -> bool {
+        let i = self.id_to_node[id1];
+        let j = self.id_to_node[id2];
+        self.find_group(i) == self.find_group(j)
+    }
+
     fn add_edge(&mut self, from: usize, to: usize, min_offset: Abs, max_offset: Abs) {
         debug_assert!(max_offset.fits(min_offset));
         match self.nodes[from].edges.entry(to) {
@@ -258,9 +278,8 @@ impl AlignmentEngine {
             return self.into_alignment_infos();
         }
 
-        for k in 0..self.groups.len() {
-            self.groups[k].parent = self.find_group(k);
-        }
+        self.flatten_groups();
+
         let mut positions = vec![Abs::zero(); self.nodes.len()];
         // Allow multiple passes, but in most cases 1 or 2 is enough.
         for pass in 1..20 {
@@ -311,11 +330,13 @@ impl AlignmentEngine {
                     }
                 }
             }
-            debug!("  ->");
-            for (node, pos) in self.nodes.iter().zip(&positions) {
-                debug!(" {:?}:{:.2}", node.ty, pos.to_mm());
+            debug_block! {
+                debug!("  ->");
+                for (node, pos) in self.nodes.iter().zip(&positions) {
+                    debug!(" {:?}:{:.2}", node.ty, pos.to_mm());
+                }
+                debugln!();
             }
-            debugln!();
             if !changed {
                 for (node, &p) in self.nodes.iter_mut().zip(&positions) {
                     node.position = p;
@@ -393,20 +414,6 @@ impl AlignmentInfos {
         let k = self.id_to_node[id];
         let g = self.groups[k].parent;
         self.groups[g].extra_space
-        //let mut extra_right = Abs::inf();
-        //for (node, group) in self.nodes.iter().zip(&self.groups) {
-        //    if group.parent == g {
-        //        let p = node.position;
-        //        for (&target, relation) in &node.edges {
-        //            if self.groups[target].parent != g {
-        //                extra_right.set_min(
-        //                    (self.nodes[target].position - p) - relation.min_offset,
-        //                );
-        //            }
-        //        }
-        //    }
-        //}
-        //extra_right
     }
 
     #[cfg(debug_assertions)]
