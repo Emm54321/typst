@@ -61,6 +61,7 @@ impl std::fmt::Debug for NodeType {
 
 #[derive(Debug)]
 struct Node {
+    #[allow(unused)]
     ty: NodeType,
     position: Abs,
     edges: HashMap<usize, Relation>,
@@ -282,6 +283,7 @@ impl AlignmentEngine {
 
         let mut positions = vec![Abs::zero(); self.nodes.len()];
         // Allow multiple passes, but in most cases 1 or 2 is enough.
+        #[allow(unused)]
         for pass in 1..20 {
             debugln!("Pass {pass}");
             let mut changed = false;
@@ -377,6 +379,7 @@ impl AlignmentEngine {
     }
 
     #[cfg(debug_assertions)]
+    #[allow(unused)]
     pub fn relations(&self) -> impl '_ + std::fmt::Debug {
         struct Relations<'a>(&'a AlignmentEngine);
         impl std::fmt::Debug for Relations<'_> {
@@ -417,6 +420,7 @@ impl AlignmentInfos {
     }
 
     #[cfg(debug_assertions)]
+    #[allow(unused)]
     pub fn positions(&self) -> impl '_ + std::fmt::Debug {
         struct Positions<'a>(&'a AlignmentInfos);
         impl std::fmt::Debug for Positions<'_> {
