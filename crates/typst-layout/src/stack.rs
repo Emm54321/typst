@@ -292,7 +292,6 @@ impl<'a> StackLayouter<'a> {
                     let other = self.axis.other();
                     let frame_size = frame.size().get(other);
                     let mut extra_size = size.get(other) - frame_size;
-                    let mut pt_extra_size = Abs::inf();
                     let mut delta = Abs::zero();
                     for (point, id, horizontal, vertical) in frame.align_points() {
                         let (usable, offset) = match self.axis {
@@ -302,11 +301,9 @@ impl<'a> StackLayouter<'a> {
                         if usable {
                             let position = align_infos.get_position(id);
                             delta = position - offset;
-                            pt_extra_size.set_min(align_infos.get_extra_space(id));
+                            extra_size = align_infos.get_extra_space(id);
+                            break;
                         }
-                    }
-                    if pt_extra_size.is_finite() {
-                        extra_size = -(self.used.cross - size.get(other));
                     }
                     let cross = align.get(other).position(extra_size) + delta;
 
