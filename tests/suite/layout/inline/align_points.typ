@@ -21,3 +21,12 @@ bb]) aa aa #box(rect[#{A}ccc\
 cc]) aa aaaa #box(rect[dd#C\
 ddd\
 ddd#{B}dd]) aaa
+
+--- inline-alignpt-nested-unused ---
+#set page(width: auto)
+#let A = { align-point("A"); [A] }
+#let B = { align-point("B"); [B] }
+Bbb #box[cc c cc] #box[aa #box[aaa#{A}aa] aa] bb#B #box(rect[cc\
+cc#B\
+cc]).
+
