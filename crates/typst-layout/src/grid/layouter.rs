@@ -957,14 +957,7 @@ impl<'a> GridLayouter<'a> {
                 }
             }
         }
-        let align_infos = align_engine.compute();
-        let CLEANUP = true;
-        //println!("Measure columns: {align_engine:?}");
-        //println!("relations:");
-        //println!("{:?}", align_engine.relations());
-        //println!("positions:");
-        //println!("{:?}", align_engine.positions());
-        self.horiz_align = Some(align_infos);
+        self.horiz_align = Some(align_engine.compute());
 
         Ok(())
     }
@@ -1112,12 +1105,6 @@ impl<'a> GridLayouter<'a> {
         }
 
         let align_infos = align_engine.compute();
-        let CLEANUP = true;
-        //println!("Measure auto columns: {align_engine:?}");
-        //println!("relations:");
-        //println!("{:?}", align_engine.relations());
-        //println!("positions:");
-        //println!("{:?}", align_engine.positions());
 
         let mut auto = Abs::zero();
         let mut count = 0;
@@ -1564,13 +1551,10 @@ impl<'a> GridLayouter<'a> {
         let mut output = Frame::soft(Size::new(self.width, height));
         for (mut pos, frame, align_y) in frames {
             let mut dy = Abs::zero();
-            let mut h = frame.height();
+            let h = frame.height();
             if let Some((point_y, id)) = frame.vertical_align_points().next() {
                 let position = align_infos.get_position(id);
                 dy = position - point_y;
-                let FIXME = true;
-                //let group_height = vertical_align_engine.get_group_size(id).unwrap();
-                //h = group_height;
             }
             pos.y += align_y.position(height - h) + dy;
             output.push_frame(pos, frame);
