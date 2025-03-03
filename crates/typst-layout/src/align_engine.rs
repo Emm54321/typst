@@ -125,9 +125,27 @@ impl AlignmentEngine {
         r
     }
 
+    pub fn add_point_group<'a>(
+        &mut self,
+        span: Range<usize>,
+        size: Abs,
+        iter: impl IntoIterator<Item = (Abs, &'a AlignPointId)>,
+    ) -> bool {
+        let mut ref_point = None;
+        for (pos, id) in iter {
+            self.add_point(id, span.clone(), pos, size - pos);
+            if let Some((pos1, id1)) = ref_point {
+                self.add_relation(id1, id, pos - pos1);
+            } else {
+                ref_point = Some((pos, id));
+            }
+        }
+        ref_point.is_some()
+    }
+
     pub fn add_point(
         &mut self,
-        id: AlignPointId,
+        id: &AlignPointId,
         span: Range<usize>,
         mut before: Abs,
         mut after: Abs,
@@ -138,7 +156,7 @@ impl AlignmentEngine {
                 let k = self.nodes.len();
                 e.insert(k);
                 self.nodes.push(Node {
-                    ty: NodeType::AlignPoint(id),
+                    ty: NodeType::AlignPoint(id.clone()),
                     position: Abs::zero(),
                     edges: Default::default(),
                 });
@@ -160,13 +178,13 @@ impl AlignmentEngine {
 
     pub fn add_relation(
         &mut self,
-        parent: AlignPointId,
-        child: AlignPointId,
+        parent: &AlignPointId,
+        child: &AlignPointId,
         mut delta: Abs,
     ) {
         debugln!("add relation: {parent:?} to {child:?} >= {:.2}", delta.to_mm());
-        let i = self.id_to_node[&parent];
-        let j = self.id_to_node[&child];
+        let i = self.id_to_node[parent];
+        let j = self.id_to_node[child];
         if self.is_rtl {
             delta = -delta;
         }

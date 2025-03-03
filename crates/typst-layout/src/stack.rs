@@ -3,8 +3,8 @@ use typst_library::engine::Engine;
 use typst_library::foundations::{Content, Packed, Resolve, StyleChain, StyledElem};
 use typst_library::introspection::{Locator, SplitLocator};
 use typst_library::layout::{
-    Abs, AlignElem, AlignPointId, Axes, Axis, Dir, FixedAlignment, Fr, Fragment, Frame,
-    HElem, Point, Regions, Size, Spacing, StackChild, StackElem, VElem,
+    Abs, AlignElem, Axes, Axis, Dir, FixedAlignment, Fr, Fragment, Frame, HElem, Point,
+    Regions, Size, Spacing, StackChild, StackElem, VElem,
 };
 use typst_syntax::Span;
 use typst_utils::{Get, Numeric};
@@ -213,28 +213,29 @@ impl<'a> StackLayouter<'a> {
 
     /// Advance to the next region.
     fn finish_region(&mut self) -> SourceResult<()> {
-        // Compute align points positions.
+        // Compute the align point positions.
         let mut align_engine = AlignmentEngine::new(1, false);
         align_engine.set_min_zone_size(0, self.used.cross);
-        for item in &self.items {
-            if let StackItem::Frame(frame, _align) = item {
-                let mut ref_point: Option<(&AlignPointId, Abs)> = None;
-                for (point, id, horizontal, vertical) in frame.align_points() {
-                    let (offset, size, usable) = match self.axis {
-                        Axis::X => (point.y, frame.height(), *vertical),
-                        Axis::Y => (point.x, frame.width(), *horizontal),
-                    };
-                    if usable {
-                        align_engine.add_point(id.clone(), 0..1, offset, size - offset);
-                        if let Some((id1, offset1)) = ref_point {
-                            align_engine.add_relation(
-                                id1.clone(),
-                                id.clone(),
-                                offset - offset1,
-                            );
-                        } else {
-                            ref_point = Some((id, offset));
-                        }
+        match self.axis {
+            Axis::X => {
+                for item in &self.items {
+                    if let StackItem::Frame(frame, _align) = item {
+                        align_engine.add_point_group(
+                            0..1,
+                            frame.height(),
+                            frame.vertical_align_points(),
+                        );
+                    }
+                }
+            }
+            Axis::Y => {
+                for item in &self.items {
+                    if let StackItem::Frame(frame, _align) = item {
+                        align_engine.add_point_group(
+                            0..1,
+                            frame.width(),
+                            frame.horizontal_align_points(),
+                        );
                     }
                 }
             }
@@ -294,13 +295,13 @@ impl<'a> StackLayouter<'a> {
                     let mut extra_size = size.get(other) - frame_size;
                     let mut delta = Abs::zero();
                     for (point, id, horizontal, vertical) in frame.align_points() {
-                        let (usable, offset) = match self.axis {
+                        let (usable, pos) = match self.axis {
                             Axis::X => (*vertical, point.y),
                             Axis::Y => (*horizontal, point.x),
                         };
                         if usable {
                             let position = align_infos.get_position(id);
-                            delta = position - offset;
+                            delta = position - pos;
                             extra_size = align_infos.get_extra_space(id);
                             break;
                         }

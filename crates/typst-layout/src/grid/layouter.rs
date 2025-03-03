@@ -7,8 +7,8 @@ use typst_library::layout::grid::resolve::{
     Cell, CellGrid, Header, LinePosition, Repeatable,
 };
 use typst_library::layout::{
-    Abs, AlignPointId, Axes, Dir, Fr, Fragment, Frame, FrameItem, Length, Point, Region,
-    Regions, Rel, Size, Sizing,
+    Abs, Axes, Dir, Fr, Fragment, Frame, FrameItem, Length, Point, Region, Regions, Rel,
+    Size, Sizing,
 };
 use typst_library::text::TextElem;
 use typst_library::visualize::Geometry;
@@ -936,25 +936,11 @@ impl<'a> GridLayouter<'a> {
                 let pod = Region::new(size, Axes::splat(false));
                 let frame =
                     layout_cell(cell, engine, 0, self.styles, pod.into())?.into_frame();
-
-                let mut ref_point: Option<(&AlignPointId, Abs)> = None;
-                for (point_x, id) in frame.horizontal_align_points() {
-                    align_engine.add_point(
-                        id.clone(),
-                        x..x + self.grid.effective_colspan_of_cell(cell),
-                        point_x,
-                        frame.width() - point_x,
-                    );
-                    if let Some((id1, ref_x)) = ref_point {
-                        align_engine.add_relation(
-                            id1.clone(),
-                            id.clone(),
-                            point_x - ref_x,
-                        );
-                    } else {
-                        ref_point = Some((id, point_x));
-                    }
-                }
+                align_engine.add_point_group(
+                    x..x + self.grid.effective_colspan_of_cell(cell),
+                    frame.width(),
+                    frame.horizontal_align_points(),
+                );
             }
         }
         self.horiz_align = Some(align_engine.compute());
@@ -1074,27 +1060,14 @@ impl<'a> GridLayouter<'a> {
                 let pod = Region::new(size, Axes::splat(false));
                 let frame =
                     layout_cell(cell, engine, 0, self.styles, pod.into())?.into_frame();
-                let mut ref_point: Option<(&AlignPointId, Abs)> = None;
-                for (point_x, id) in frame.horizontal_align_points() {
-                    align_engine.add_point(
-                        id.clone(),
-                        x..x + colspan,
-                        point_x,
-                        frame.width() - point_x,
-                    );
-                    if let Some((id1, ref_x)) = ref_point {
-                        align_engine.add_relation(
-                            id1.clone(),
-                            id.clone(),
-                            point_x - ref_x,
-                        );
-                    } else {
-                        ref_point = Some((id, point_x));
-                    }
-                }
+                let added = align_engine.add_point_group(
+                    x..x + colspan,
+                    frame.width(),
+                    frame.horizontal_align_points(),
+                );
                 // If there is no align point and the cell spans at least one auto column,
                 // make sure the column size is large enough for the frame width.
-                if ref_point.is_none()
+                if !added
                     && self.grid.cols[x..x + colspan]
                         .iter()
                         .any(|&col| col == Sizing::Auto)
@@ -1511,24 +1484,11 @@ impl<'a> GridLayouter<'a> {
                         layout_cell(cell, engine, disambiguator, self.styles, pod)?
                             .into_frame();
 
-                    let mut ref_point: Option<(&AlignPointId, Abs)> = None;
-                    for (point_y, id) in frame.vertical_align_points() {
-                        vertical_align_engine.add_point(
-                            id.clone(),
-                            0..1, //FIXME
-                            point_y,
-                            frame.height() - point_y,
-                        );
-                        if let Some((id1, ref_y)) = ref_point {
-                            vertical_align_engine.add_relation(
-                                id1.clone(),
-                                id.clone(),
-                                point_y - ref_y,
-                            );
-                        } else {
-                            ref_point = Some((id, point_y));
-                        }
-                    }
+                    vertical_align_engine.add_point_group(
+                        0..1,
+                        frame.height(),
+                        frame.vertical_align_points(),
+                    );
 
                     let align_infos = self.horiz_align.as_ref().unwrap();
                     let mut dx = if self.is_rtl {
