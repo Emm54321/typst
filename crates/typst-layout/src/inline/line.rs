@@ -502,7 +502,7 @@ pub fn commit(
     let mut align_points: HashMap<AlignPointId, (Abs, bool, bool)> = Default::default();
     let mut align_engine = AlignmentEngine::new(1, false);
     let baseline_point = AlignPointId::unique();
-    align_engine.add_point(baseline_point.clone(), 0..1, Abs::zero(), Abs::zero());
+    align_engine.add_point(&baseline_point, 0..1, Abs::zero(), Abs::zero());
     for item in line.items.iter() {
         let mut push = |offset: &mut Abs, frame: Frame| {
             let width = frame.width();
@@ -549,8 +549,8 @@ pub fn commit(
                 let id = AlignPointId::from(name);
                 align_points.insert(id.clone(), (offset, *horizontal, *vertical));
                 if *vertical {
-                    align_engine.add_point(id.clone(), 0..1, Abs::zero(), Abs::zero());
-                    align_engine.add_relation(baseline_point.clone(), id, Abs::zero());
+                    align_engine.add_point(&id, 0..1, Abs::zero(), Abs::zero());
+                    align_engine.add_relation(&baseline_point, &id, Abs::zero());
                 }
             }
         }
@@ -564,15 +564,7 @@ pub fn commit(
     // Handle vertical alignment.
     for (_offset, frame) in &frames {
         // Add align points coming from contained frames.
-        let mut ref_point: Option<(&AlignPointId, Abs)> = None;
-        for (point_y, id) in frame.vertical_align_points() {
-            align_engine.add_point(id.clone(), 0..1, point_y, frame.height() - point_y);
-            if let Some((id1, y1)) = ref_point {
-                align_engine.add_relation(id1.clone(), id.clone(), point_y - y1);
-            } else {
-                ref_point = Some((id, point_y));
-            }
-        }
+        align_engine.add_point_group(0..1, frame.height(), frame.vertical_align_points());
     }
 
     // Frames that are not linked to the baseline in any way, must be linked to the baseline now.
@@ -589,13 +581,13 @@ pub fn commit(
         if !linked {
             if let Some((point_y, id)) = frame.vertical_align_points().next() {
                 align_engine.add_relation(
-                    baseline_point.clone(),
-                    id.clone(),
+                    &baseline_point,
+                    id,
                     point_y - frame.baseline(),
                 );
             } else {
                 align_engine.add_point(
-                    baseline_point.clone(),
+                    &baseline_point,
                     0..1,
                     frame.baseline(),
                     frame.height() - frame.baseline(),
