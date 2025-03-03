@@ -251,6 +251,27 @@ impl<'a> StackLayouter<'a> {
             .select(self.initial, self.used.into_axes(self.axis))
             .min(self.initial);
 
+        // If the elements expand in the cross direction and are right or
+        // center aligned, the align points may put the position of the
+        // end of zone after the end of the region. Compute the amount of
+        // overflow, so that we can subtract it later.
+        let extra_cross_size = match self.axis {
+            Axis::X => {
+                if self.expand.y {
+                    align_infos.get_zone_size(0) - self.initial.y
+                } else {
+                    Abs::zero()
+                }
+            }
+            Axis::Y => {
+                if self.expand.x {
+                    align_infos.get_zone_size(0) - self.initial.x
+                } else {
+                    Abs::zero()
+                }
+            }
+        };
+
         // Expand fully if there are fr spacings.
         let full = self.initial.get(self.axis);
         let remaining = full - self.used.main;
@@ -302,7 +323,8 @@ impl<'a> StackLayouter<'a> {
                         if usable {
                             let position = align_infos.get_position(id);
                             delta = position - pos;
-                            extra_size = align_infos.get_extra_space(id);
+                            extra_size =
+                                align_infos.get_extra_space(id) - extra_cross_size;
                             break;
                         }
                     }
