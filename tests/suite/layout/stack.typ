@@ -108,15 +108,29 @@ World! 🌍
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
-#stack(
+#rect(stack(
   spacing: 5pt,
   align(right, [aaa#{A}aaa]),
   align(right, [a#{A}aaaaaaa]),
-  align(right, [bbbbbbb#{B}b]),
+  align(right, [bbbbbbb#{B}bbbbb]),
   align(right, [aaaaa#{A}aa]),
   align(right, [b#{B}bbb]),
   align(right, [bb#{B}b]),
-)
+))
+
+--- stack-alignpt-right-fixed-width ---
+#set page(width: auto)
+#let A = { align-point("A"); [A] }
+#let B = { align-point("B"); [B] }
+#rect(width: 30mm, stack(
+  spacing: 5pt,
+  align(right, [aaa#{A}aaa]),
+  align(right, [a#{A}aaaaaaa]),
+  align(right, [bbbbbbb#{B}bbbbb]),
+  align(right, [aaaaa#{A}aa]),
+  align(right, [b#{B}bbb]),
+  align(right, [bb#{B}b]),
+))
 
 --- stack-alignpt-center ---
 #set page(width: auto)
