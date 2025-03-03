@@ -1507,16 +1507,17 @@ impl<'a> GridLayouter<'a> {
         }
 
         let align_infos = vertical_align_engine.compute();
+        let extra_row_height = align_infos.get_zone_size(0) - height;
 
         let mut output = Frame::soft(Size::new(self.width, height));
         for (mut pos, frame, align_y) in frames {
             let mut dy = Abs::zero();
-            let h = frame.height();
+            let mut extra_height = height - frame.height();
             if let Some((point_y, id)) = frame.vertical_align_points().next() {
-                let position = align_infos.get_position(id);
-                dy = position - point_y;
+                dy = align_infos.get_position(id) - point_y;
+                extra_height = align_infos.get_extra_space(id) - extra_row_height;
             }
-            pos.y += align_y.position(height - h) + dy;
+            pos.y = dy + align_y.position(extra_height);
             output.push_frame(pos, frame);
         }
 
