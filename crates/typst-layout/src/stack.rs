@@ -223,7 +223,7 @@ impl<'a> StackLayouter<'a> {
                         align_engine.add_point_group(
                             0..1,
                             frame.height(),
-                            frame.vertical_align_points(),
+                            frame.align_points().iter_vertical(),
                         );
                     }
                 }
@@ -234,7 +234,7 @@ impl<'a> StackLayouter<'a> {
                         align_engine.add_point_group(
                             0..1,
                             frame.width(),
-                            frame.horizontal_align_points(),
+                            frame.align_points().iter_horizontal(),
                         );
                     }
                 }
@@ -315,7 +315,7 @@ impl<'a> StackLayouter<'a> {
                     let frame_size = frame.size().get(other);
                     let mut extra_size = size.get(other) - frame_size;
                     let mut delta = Abs::zero();
-                    for (point, id, horizontal, vertical) in frame.align_points() {
+                    for (point, id, horizontal, vertical) in frame.align_points().iter() {
                         let (usable, pos) = match self.axis {
                             Axis::X => (*vertical, point.y),
                             Axis::Y => (*horizontal, point.x),

@@ -564,7 +564,11 @@ pub fn commit(
     // Handle vertical alignment.
     for (_offset, frame) in &frames {
         // Add align points coming from contained frames.
-        align_engine.add_point_group(0..1, frame.height(), frame.vertical_align_points());
+        align_engine.add_point_group(
+            0..1,
+            frame.height(),
+            frame.align_points().iter_vertical(),
+        );
     }
 
     // Frames that are not linked to the baseline in any way, must be linked to the baseline now.
@@ -572,14 +576,14 @@ pub fn commit(
     // aligned on the baseline and the others will be aligned through the first one.
     for (_offset, frame) in &frames {
         let mut linked = false;
-        for (_, id) in frame.vertical_align_points() {
+        for (_, id) in frame.align_points().iter_vertical() {
             if align_engine.is_same_group(id, &baseline_point) {
                 linked = true;
                 break;
             }
         }
         if !linked {
-            if let Some((point_y, id)) = frame.vertical_align_points().next() {
+            if let Some((point_y, id)) = frame.align_points().first_vertical() {
                 align_engine.add_relation(
                     &baseline_point,
                     id,
@@ -612,7 +616,7 @@ pub fn commit(
     // Construct the line's frame.
     for (offset, frame) in frames {
         let x = offset + p.config.align.position(remaining);
-        let y = if let Some((point_y, id)) = frame.vertical_align_points().next() {
+        let y = if let Some((point_y, id)) = frame.align_points().first_vertical() {
             align_infos.get_position(id) - point_y
         } else {
             top - frame.baseline()
@@ -623,7 +627,9 @@ pub fn commit(
     // Set the line align points.
     for (name, (offset, horizontal, vertical)) in align_points {
         let x = offset + p.config.align.position(remaining);
-        output.add_align_point(Point::new(x, top), name, horizontal, vertical);
+        output
+            .align_points_mut()
+            .add(Point::new(x, top), name, horizontal, vertical);
     }
 
     Ok(output)

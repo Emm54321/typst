@@ -4,15 +4,13 @@ use std::fmt::{self, Debug, Formatter};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
-use smallvec::SmallVec;
-
 use typst_syntax::Span;
 use typst_utils::{LazyHash, Numeric};
 
 use crate::foundations::{cast, dict, Dict, Label, Value};
 use crate::introspection::{Location, Tag};
 use crate::layout::{
-    Abs, AlignPointId, Axes, FixedAlignment, Length, Point, Size, Transform,
+    Abs, AlignPoints, Axes, FixedAlignment, Length, Point, Size, Transform,
 };
 use crate::model::Destination;
 use crate::text::TextItem;
@@ -32,8 +30,8 @@ pub struct Frame {
     ///
     /// Determines whether it is a boundary for gradient drawing.
     kind: FrameKind,
-    // FIXME: use some small hashmap
-    align_points: SmallVec<[(Point, AlignPointId, bool, bool); 2]>,
+    /// Align points contained in the frame.
+    align_points: AlignPoints,
 }
 
 /// Constructor, accessors and setters.
@@ -143,58 +141,14 @@ impl Frame {
         self.size.y - self.baseline()
     }
 
-    pub fn has_align_points(&self) -> bool {
-        !self.align_points.is_empty()
+    /// Access the align points contained in the frame.
+    pub fn align_points(&self) -> &AlignPoints {
+        &self.align_points
     }
 
-    pub fn has_horizontal_align_points(&self) -> bool {
-        self.align_points
-            .iter()
-            .any(|(_point, _id, horizontal, _vertical)| *horizontal)
-    }
-
-    pub fn has_vertical_align_points(&self) -> bool {
-        self.align_points
-            .iter()
-            .any(|(_point, _id, _horizontal, vertical)| *vertical)
-    }
-
-    pub fn align_points(
-        &self,
-    ) -> std::slice::Iter<'_, (Point, AlignPointId, bool, bool)> {
-        self.align_points.iter()
-    }
-
-    pub fn horizontal_align_points(
-        &self,
-    ) -> impl '_ + Iterator<Item = (Abs, &AlignPointId)> {
-        self.align_points
-            .iter()
-            .filter_map(
-                |(point, id, horizontal, _vertical)| {
-                    if *horizontal {
-                        Some((point.x, id))
-                    } else {
-                        None
-                    }
-                },
-            )
-    }
-
-    pub fn vertical_align_points(
-        &self,
-    ) -> impl '_ + Iterator<Item = (Abs, &AlignPointId)> {
-        self.align_points
-            .iter()
-            .filter_map(
-                |(point, id, _horizontal, vertical)| {
-                    if *vertical {
-                        Some((point.y, id))
-                    } else {
-                        None
-                    }
-                },
-            )
+    /// Mutable access to the align points contained in the frame.
+    pub fn align_points_mut(&mut self) -> &mut AlignPoints {
+        &mut self.align_points
     }
 
     /// An iterator over the items inside this frame alongside their positions
@@ -239,7 +193,7 @@ impl Frame {
     /// group based on the number of items in it.
     pub fn push_frame(&mut self, pos: Point, mut frame: Frame) {
         if self.should_inline(&frame) {
-            self.take_frame_align_points(pos, &mut frame);
+            self.align_points.take(pos, &mut frame.align_points);
             self.inline(self.layer(), pos, frame);
         } else {
             self.push(pos, FrameItem::Group(GroupItem::new(frame)));
@@ -281,23 +235,6 @@ impl Frame {
             self.inline(0, pos, frame);
         } else {
             self.prepend(pos, FrameItem::Group(GroupItem::new(frame)));
-        }
-    }
-
-    pub fn add_align_point(
-        &mut self,
-        pos: Point,
-        id: AlignPointId,
-        horizontal: bool,
-        vertical: bool,
-    ) {
-        // TODO: use some small hashmap to store align points.
-        if let Some(k) = self.align_points.iter().position(|p| p.1 == id) {
-            self.align_points[k].0 = pos;
-            self.align_points[k].2 = horizontal;
-            self.align_points[k].3 = vertical;
-        } else {
-            self.align_points.push((pos, id, horizontal, vertical));
         }
     }
 
@@ -352,24 +289,11 @@ impl Frame {
         }
     }
 
-    fn take_frame_align_points(&mut self, point: Point, frame: &mut Frame) {
-        // Optimize for usual simple cases.
-        if !frame.align_points.is_empty() {
-            if self.align_points.is_empty() {
-                self.align_points = std::mem::take(&mut frame.align_points);
-                self.align_points.iter_mut().for_each(|(pos, ..)| *pos += point);
-            } else {
-                for (pos, id, horizontal, vertical) in frame.align_points.drain(..) {
-                    self.add_align_point(point + pos, id, horizontal, vertical);
-                }
-            }
-        }
-    }
-
+    /// Add the align points contained in an item to the frame.
     fn take_item_align_points(&mut self, point: Point, item: &mut FrameItem) {
         match item {
             FrameItem::Group(item) => {
-                self.take_frame_align_points(point, &mut item.frame);
+                self.align_points.take(point, &mut item.frame.align_points);
             }
             FrameItem::Text(..)
             | FrameItem::Shape(..)
@@ -415,9 +339,7 @@ impl Frame {
             for (point, _) in Arc::make_mut(&mut self.items).iter_mut() {
                 *point += offset;
             }
-            for (point, ..) in self.align_points.iter_mut() {
-                *point += offset;
-            }
+            self.align_points.translate(offset);
         }
     }
 

@@ -939,7 +939,7 @@ impl<'a> GridLayouter<'a> {
                 align_engine.add_point_group(
                     x..x + self.grid.effective_colspan_of_cell(cell),
                     frame.width(),
-                    frame.horizontal_align_points(),
+                    frame.align_points().iter_horizontal(),
                 );
             }
         }
@@ -1063,7 +1063,7 @@ impl<'a> GridLayouter<'a> {
                 let added = align_engine.add_point_group(
                     x..x + colspan,
                     frame.width(),
-                    frame.horizontal_align_points(),
+                    frame.align_points().iter_horizontal(),
                 );
                 // If there is no align point and the cell spans at least one auto column,
                 // make sure the column size is large enough for the frame width.
@@ -1487,7 +1487,7 @@ impl<'a> GridLayouter<'a> {
                     vertical_align_engine.add_point_group(
                         0..1,
                         frame.height(),
-                        frame.vertical_align_points(),
+                        frame.align_points().iter_vertical(),
                     );
 
                     let align_infos = self.horiz_align.as_ref().unwrap();
@@ -1497,7 +1497,7 @@ impl<'a> GridLayouter<'a> {
                     } else {
                         align_infos.get_zone_position(x)
                     };
-                    if let Some((point_x, id)) = frame.horizontal_align_points().next() {
+                    if let Some((point_x, id)) = frame.align_points().first_horizontal() {
                         dx = align_infos.get_position(id) - point_x
                             + cell.align.x.position(align_infos.get_extra_space(id));
                     }
@@ -1513,7 +1513,7 @@ impl<'a> GridLayouter<'a> {
         for (mut pos, frame, align_y) in frames {
             let mut dy = Abs::zero();
             let mut extra_height = height - frame.height();
-            if let Some((point_y, id)) = frame.vertical_align_points().next() {
+            if let Some((point_y, id)) = frame.align_points().first_vertical() {
                 dy = align_infos.get_position(id) - point_y;
                 extra_height = align_infos.get_extra_space(id) - extra_row_height;
             }
