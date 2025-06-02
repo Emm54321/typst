@@ -1067,11 +1067,7 @@ impl<'a> GridLayouter<'a> {
                 );
                 // If there is no align point and the cell spans at least one auto column,
                 // make sure the column size is large enough for the frame width.
-                if !added
-                    && self.grid.cols[x..x + colspan]
-                        .iter()
-                        .any(|&col| col == Sizing::Auto)
-                {
+                if !added && self.grid.cols[x..x + colspan].contains(&Sizing::Auto) {
                     align_engine.set_min_span_size(x..x + colspan, frame.width());
                 }
             }
