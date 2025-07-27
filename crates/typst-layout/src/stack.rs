@@ -9,6 +9,8 @@ use typst_library::layout::{
 use typst_syntax::Span;
 use typst_utils::{Get, Numeric};
 
+use crate::align_engine::AlignmentEngine;
+
 /// Layout the stack.
 #[typst_macros::time(span = elem.span())]
 pub fn layout_stack(
@@ -211,12 +213,64 @@ impl<'a> StackLayouter<'a> {
 
     /// Advance to the next region.
     fn finish_region(&mut self) -> SourceResult<()> {
+        // Compute the align point positions.
+        let mut align_engine = AlignmentEngine::new(1, false);
+        align_engine.set_min_zone_size(0, self.used.cross);
+        match self.axis {
+            Axis::X => {
+                for item in &self.items {
+                    if let StackItem::Frame(frame, _align) = item {
+                        align_engine.add_point_group(
+                            0..1,
+                            frame.height(),
+                            frame.align_points().iter_vertical(),
+                        );
+                    }
+                }
+            }
+            Axis::Y => {
+                for item in &self.items {
+                    if let StackItem::Frame(frame, _align) = item {
+                        align_engine.add_point_group(
+                            0..1,
+                            frame.width(),
+                            frame.align_points().iter_horizontal(),
+                        );
+                    }
+                }
+            }
+        }
+
+        let align_infos = align_engine.compute();
+        self.used.cross = align_infos.get_zone_size(0);
+
         // Determine the size of the stack in this region depending on whether
         // the region expands.
         let mut size = self
             .expand
             .select(self.initial, self.used.into_axes(self.axis))
             .min(self.initial);
+
+        // If the elements expand in the cross direction and are right or
+        // center aligned, the align points may put the position of the
+        // end of zone after the end of the region. Compute the amount of
+        // overflow, so that we can subtract it later.
+        let extra_cross_size = match self.axis {
+            Axis::X => {
+                if self.expand.y {
+                    align_infos.get_zone_size(0) - self.initial.y
+                } else {
+                    Abs::zero()
+                }
+            }
+            Axis::Y => {
+                if self.expand.x {
+                    align_infos.get_zone_size(0) - self.initial.x
+                } else {
+                    Abs::zero()
+                }
+            }
+        };
 
         // Expand fully if there are fr spacings.
         let full = self.initial.get(self.axis);
@@ -258,9 +312,23 @@ impl<'a> StackLayouter<'a> {
 
                     // Align along the cross axis.
                     let other = self.axis.other();
-                    let cross = align
-                        .get(other)
-                        .position(size.get(other) - frame.size().get(other));
+                    let frame_size = frame.size().get(other);
+                    let mut extra_size = size.get(other) - frame_size;
+                    let mut delta = Abs::zero();
+                    for (point, id, horizontal, vertical) in frame.align_points().iter() {
+                        let (usable, pos) = match self.axis {
+                            Axis::X => (*vertical, point.y),
+                            Axis::Y => (*horizontal, point.x),
+                        };
+                        if usable {
+                            let position = align_infos.get_position(id);
+                            delta = position - pos;
+                            extra_size =
+                                align_infos.get_extra_space(id) - extra_cross_size;
+                            break;
+                        }
+                    }
+                    let cross = align.get(other).position(extra_size) + delta;
 
                     let pos = GenericSize::new(cross, main).to_point(self.axis);
                     cursor += child;
