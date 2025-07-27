@@ -1,5 +1,6 @@
 //! Typst's layout engine.
 
+mod align_engine;
 mod flow;
 mod grid;
 mod image;
@@ -18,3 +19,5 @@ mod transforms;
 pub use self::flow::{layout_fragment, layout_frame};
 pub use self::pages::layout_document;
 pub use self::rules::register;
+
+use align_engine::AlignmentEngine;
