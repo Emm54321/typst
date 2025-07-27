@@ -283,11 +283,17 @@ impl AlignmentEngine {
         next.push(0);
         while let Some(i) = next.pop() {
             order.push(i);
+            let old_len = next.len();
+            #[allow(clippy::iter_over_hash_type)]
             for &j in self.nodes[i].edges.keys() {
                 self.requirements[j].remove(&i);
                 if self.requirements[j].is_empty() {
                     next.push(j);
                 }
+            }
+            if next.len() > old_len + 1 {
+                // Cancel the effect of the random iteration order of the preceding loop.
+                next[old_len..].sort_unstable();
             }
         }
         debugln!("Order: {order:?}");
@@ -300,6 +306,7 @@ impl AlignmentEngine {
         self.flatten_groups();
 
         let mut positions = vec![Abs::zero(); self.nodes.len()];
+        let mut tmp = Vec::new();
         // Allow multiple passes, but in most cases 1 or 2 is enough.
         #[allow(unused)]
         for pass in 1..20 {
@@ -307,7 +314,11 @@ impl AlignmentEngine {
             let mut changed = false;
             for &k1 in &order {
                 let node1 = &self.nodes[k1];
-                for (&k2, relation) in &node1.edges {
+                // Avoid iterating over node1.edges since the iteration order is undefined
+                // and may not be consistent between runs.
+                tmp.extend(node1.edges.iter().map(|(&k, &r)| (k, r)));
+                tmp.sort_unstable_by_key(|&(k, _r)| k);
+                for (k2, relation) in tmp.drain(..) {
                     if relation.is_fixed() {
                         if !positions[k2].approx_eq(positions[k1] + relation.min_offset) {
                             if positions[k2] < positions[k1] + relation.min_offset {
@@ -371,6 +382,8 @@ impl AlignmentEngine {
     fn into_alignment_infos(mut self) -> AlignmentInfos {
         for (k, node) in self.nodes.iter().enumerate() {
             let g = self.groups[k].parent;
+            // The iteration order does not matter here.
+            #[allow(clippy::iter_over_hash_type)]
             for (&target, relation) in &node.edges {
                 if self.groups[target].parent != g {
                     self.groups[g].extra_space.set_min(
@@ -402,6 +415,7 @@ impl AlignmentEngine {
         struct Relations<'a>(&'a AlignmentEngine);
         impl std::fmt::Debug for Relations<'_> {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                #[allow(clippy::iter_over_hash_type)]
                 for node in &self.0.nodes {
                     write!(f, "{:?}:", node.ty)?;
                     for (&k, rel) in &node.edges {
