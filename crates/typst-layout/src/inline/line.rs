@@ -687,12 +687,15 @@ pub fn commit(
     }
 
     // Set the line align points.
+    #[allow(clippy::iter_over_hash_type)]
     for (name, (offset, horizontal, vertical)) in align_points {
         let x = offset + p.config.align.position(remaining);
         output
             .align_points_mut()
             .add(Point::new(x, top), name, horizontal, vertical);
     }
+    // Cancel the effect of the random iteration order.
+    output.align_points_mut().sort();
 
     Ok(output)
 }
