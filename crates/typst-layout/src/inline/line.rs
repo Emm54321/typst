@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::fmt::{self, Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 
 use typst_library::engine::Engine;
 use typst_library::foundations::Resolve;
 use typst_library::introspection::{SplitLocator, Tag, TagFlags};
-use typst_library::layout::{Abs, Dir, Em, Fr, Frame, FrameItem, Point};
+use typst_library::layout::{Abs, AlignPointId, Dir, Em, Fr, Frame, FrameItem, Point};
 use typst_library::model::ParLineMarker;
 use typst_library::text::{Lang, TextElem, variant};
 use typst_utils::Numeric;
@@ -12,6 +13,8 @@ use typst_utils::Numeric;
 use super::*;
 use crate::inline::linebreak::Trim;
 use crate::inline::shaping::Adjustability;
+
+use crate::AlignmentEngine;
 use crate::modifiers::layout_and_modify;
 
 const SHY: char = '\u{ad}';
@@ -551,16 +554,15 @@ pub fn commit(
         }
     }
 
-    let mut top = Abs::zero();
-    let mut bottom = Abs::zero();
-
     // Build the frames and determine the height and baseline.
     let mut frames = vec![];
+    let mut align_points: HashMap<AlignPointId, (Abs, bool, bool)> = Default::default();
+    let mut align_engine = AlignmentEngine::new(1, false);
+    let baseline_point = AlignPointId::unique();
+    align_engine.add_point(&baseline_point, 0..1, Abs::zero(), Abs::zero());
     for &(idx, ref item) in line.items.indexed_iter() {
         let mut push = |offset: &mut Abs, frame: Frame, idx: LogicalIndex| {
             let width = frame.width();
-            top.set_max(frame.baseline());
-            bottom.set_max(frame.size().y - frame.baseline());
             frames.push((*offset, frame, idx));
             *offset += width;
         };
@@ -600,6 +602,14 @@ pub fn commit(
                 frames.push((offset, frame, idx));
             }
             Item::Skip(_) => {}
+            Item::AlignPoint(name, horizontal, vertical) => {
+                let id = AlignPointId::from(name);
+                align_points.insert(id.clone(), (offset, *horizontal, *vertical));
+                if *vertical {
+                    align_engine.add_point(&id, 0..1, Abs::zero(), Abs::zero());
+                    align_engine.add_relation(&baseline_point, &id, Abs::zero());
+                }
+            }
         }
     }
 
@@ -607,6 +617,50 @@ pub fn commit(
     if !fr.is_zero() {
         remaining = Abs::zero();
     }
+
+    // Handle vertical alignment.
+    for (_offset, frame, _idx) in &frames {
+        // Add align points coming from contained frames.
+        align_engine.add_point_group(
+            0..1,
+            frame.height(),
+            frame.align_points().iter_vertical(),
+        );
+    }
+
+    // Frames that are not linked to the baseline in any way, must be linked to the baseline now.
+    // If several frames are linked together but not tied to the baseline, the first one will be
+    // aligned on the baseline and the others will be aligned through the first one.
+    for (_offset, frame, _idx) in &frames {
+        let mut linked = false;
+        for (_, id) in frame.align_points().iter_vertical() {
+            if align_engine.is_same_group(id, &baseline_point) {
+                linked = true;
+                break;
+            }
+        }
+        if !linked {
+            if let Some((point_y, id)) = frame.align_points().first_vertical() {
+                align_engine.add_relation(
+                    &baseline_point,
+                    id,
+                    point_y - frame.baseline(),
+                );
+            } else {
+                align_engine.add_point(
+                    &baseline_point,
+                    0..1,
+                    frame.baseline(),
+                    frame.height() - frame.baseline(),
+                );
+            }
+        }
+    }
+
+    let align_infos = align_engine.compute();
+
+    let top = align_infos.get_position(&baseline_point);
+    let bottom = align_infos.get_zone_size(0) - top;
 
     let size = Size::new(width, top + bottom);
     let mut output = Frame::soft(size);
@@ -624,8 +678,20 @@ pub fn commit(
     // Construct the line's frame.
     for (offset, frame, _) in frames {
         let x = offset + p.config.align.position(remaining);
-        let y = top - frame.baseline();
+        let y = if let Some((point_y, id)) = frame.align_points().first_vertical() {
+            align_infos.get_position(id) - point_y
+        } else {
+            top - frame.baseline()
+        };
         output.push_frame(Point::new(x, y), frame);
+    }
+
+    // Set the line align points.
+    for (name, (offset, horizontal, vertical)) in align_points {
+        let x = offset + p.config.align.position(remaining);
+        output
+            .align_points_mut()
+            .add(Point::new(x, top), name, horizontal, vertical);
     }
 
     Ok(output)

@@ -25,7 +25,7 @@ use typst_library::introspection::{
     Locatable, LocationKey, SplitLocator, Tag, TagElem, TagFlags, Tagged,
 };
 use typst_library::layout::{
-    AlignElem, BoxElem, HElem, InlineElem, PageElem, PagebreakElem, VElem,
+    AlignElem, AlignPointElem, BoxElem, HElem, InlineElem, PageElem, PagebreakElem, VElem,
 };
 use typst_library::math::{EquationElem, Mathy};
 use typst_library::model::{
@@ -1054,6 +1054,7 @@ static PAR: GroupingRule = GroupingRule {
             || elem == SmartQuoteElem::ELEM
             || elem == InlineElem::ELEM
             || elem == BoxElem::ELEM
+            || elem == AlignPointElem::ELEM
         {
             GroupingEffect::Trigger
         } else if elem == SpaceElem::ELEM {
