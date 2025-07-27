@@ -186,4 +186,12 @@ impl AlignPoints {
             }
         }
     }
+
+    /// Sort by position.
+    /// Needed only to make layout consistent across runs when points are added in random
+    /// order due to iteration over hashmaps. This should not be needed when there are
+    /// no conflicts amoung align points.
+    pub fn sort(&mut self) {
+        self.points.sort_unstable_by_key(|t| (t.0.y, t.0.x));
+    }
 }
