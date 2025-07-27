@@ -1,8 +1,9 @@
 use typst_library::diag::warning;
-use typst_library::foundations::{Packed, Resolve};
+use typst_library::foundations::{Packed, Resolve, Str};
 use typst_library::introspection::{SplitLocator, Tag, TagElem};
 use typst_library::layout::{
-    Abs, BoxElem, Dir, Fr, Frame, HElem, InlineElem, InlineItem, Sizing, Spacing,
+    Abs, AlignPointElem, BoxElem, Dir, Fr, Frame, HElem, InlineElem, InlineItem, Sizing,
+    Spacing,
 };
 use typst_library::routines::Pair;
 use typst_library::text::{
@@ -43,6 +44,8 @@ pub enum Item<'a> {
     /// An item that is invisible and needs to be skipped, e.g. a Unicode
     /// isolate.
     Skip(&'static str),
+    /// An alignment point
+    AlignPoint(Str, bool, bool),
 }
 
 impl<'a> Item<'a> {
@@ -76,6 +79,7 @@ impl<'a> Item<'a> {
             Self::Frame(_) => OBJ_REPLACE,
             Self::Tag(_) => "",
             Self::Skip(s) => s,
+            Self::AlignPoint(..) => "",
         }
     }
 
@@ -92,6 +96,7 @@ impl<'a> Item<'a> {
             Self::Frame(frame) => frame.width(),
             Self::Fractional(_, _) | Self::Tag(_) => Abs::zero(),
             Self::Skip(_) => Abs::zero(),
+            Self::AlignPoint(..) => Abs::zero(),
         }
     }
 }
@@ -233,6 +238,12 @@ pub fn collect<'a>(
             }
         } else if let Some(elem) = child.to_packed::<TagElem>() {
             collector.push_item(Item::Tag(&elem.tag));
+        } else if let Some(elem) = child.to_packed::<AlignPointElem>() {
+            collector.push_item(Item::AlignPoint(
+                elem.name.get_cloned(styles),
+                elem.horizontal.get(styles),
+                elem.vertical.get(styles),
+            ));
         } else {
             // Non-paragraph inline layout should never trigger this since it
             // only won't be triggered if we see any non-inline content.
