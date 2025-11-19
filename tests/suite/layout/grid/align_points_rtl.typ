@@ -1,4 +1,4 @@
---- table-alignpt-fixed-cols-rtl ---
+--- table-alignpt-fixed-cols-rtl paged ---
 #set text(dir: rtl)
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
@@ -13,7 +13,7 @@
   [aaa#{A}aaaaaa], [b#{B}bbbb], [c#{C}cccc],
 )
 
---- table-alignpt-auto-cols-rtl ---
+--- table-alignpt-auto-cols-rtl paged ---
 #set text(dir: rtl)
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
@@ -26,7 +26,7 @@
   [aaa#{A}aaaaaa], [b#{B}bbbb], [c#{C}cccc],
 )
 
---- table-alignpt-multiple-points-rtl ---
+--- table-alignpt-multiple-points-rtl paged ---
 #set text(dir: rtl)
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
@@ -45,7 +45,7 @@
   table.cell(align: center, [ccccc#{C}cc]),
 )
 
---- table-alignpt-linked-points-rtl ---
+--- table-alignpt-linked-points-rtl paged ---
 #set text(dir: rtl)
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
@@ -65,7 +65,7 @@
   [b#{B}bbbb],
 )
 
---- table-alignpt-colspan-rtl ---
+--- table-alignpt-colspan-rtl paged ---
 #set text(dir: rtl)
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
@@ -82,7 +82,7 @@
   table.cell(colspan: 3, [cccccccc#{C}cccccccccccccccccc]),
 )
 
---- table-alignpt-linked-colspans-rtl ---
+--- table-alignpt-linked-colspans-rtl paged ---
 #set text(dir: rtl)
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
