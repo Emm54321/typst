@@ -90,7 +90,7 @@ World! 🌍
   stack(spacing: infinite-length)[A][B]
 })
 
---- stack-alignpt ---
+--- stack-alignpt paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -104,7 +104,7 @@ World! 🌍
   [bb#{B}b],
 )
 
---- stack-alignpt-right ---
+--- stack-alignpt-right paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -118,7 +118,7 @@ World! 🌍
   align(right, [bb#{B}b]),
 ))
 
---- stack-alignpt-right-fixed-width ---
+--- stack-alignpt-right-fixed-width paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -132,7 +132,7 @@ World! 🌍
   align(right, [bb#{B}b]),
 ))
 
---- stack-alignpt-center ---
+--- stack-alignpt-center paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -147,7 +147,7 @@ World! 🌍
   align(center, [bb#{B}b]),
 ))
 
---- stack-alignpt-linked ---
+--- stack-alignpt-linked paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -164,7 +164,7 @@ World! 🌍
   [cccc#{C}cc],
 )
 
---- stack-alignpt-ltr ---
+--- stack-alignpt-ltr paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -187,7 +187,7 @@ World! 🌍
   [bb#{B}b],
 )
 
---- stack-alignpt-ltr-align ---
+--- stack-alignpt-ltr-align paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
