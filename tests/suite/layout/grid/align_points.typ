@@ -1,4 +1,4 @@
---- table-alignpt-fixed-cols ---
+--- table-alignpt-fixed-cols paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -12,7 +12,7 @@
   [aaa#{A}aaaaaa], [b#{B}bbbb], [c#{C}cccc],
 )
 
---- table-alignpt-auto-cols ---
+--- table-alignpt-auto-cols paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -24,7 +24,7 @@
   [aaa#{A}aaaaaa], [b#{B}bbbb], [c#{C}cccc],
 )
 
---- table-alignpt-multiple-points ---
+--- table-alignpt-multiple-points paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -42,7 +42,7 @@
   table.cell(align: center, [ccccc#{C}cc]),
 )
 
---- table-alignpt-linked-points ---
+--- table-alignpt-linked-points paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -61,7 +61,7 @@
   [b#{B}bbbb],
 )
 
---- table-alignpt-colspan ---
+--- table-alignpt-colspan paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -77,7 +77,7 @@
   table.cell(colspan: 3, [cccccccccccccccccccccccccc#{C}c]),
 )
 
---- table-alignpt-linked-colspans ---
+--- table-alignpt-linked-colspans paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }

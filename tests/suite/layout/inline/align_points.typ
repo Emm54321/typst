@@ -1,4 +1,4 @@
---- inline-alignpt ---
+--- inline-alignpt paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #{A}a aaa #box[bbb\
@@ -8,7 +8,7 @@ bb] aa aa #box(rect(radius: 5pt, stroke: 5pt+red)[#{A}ccc cc]) aa aaaa #box[dd\
 ddd\
 ddd#{A}dd] aaa
 
---- inline-alignpt-linked ---
+--- inline-alignpt-linked paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
@@ -22,7 +22,7 @@ cc]) aa aaaa #box(rect[dd#C\
 ddd\
 ddd#{B}dd]) aaa
 
---- inline-alignpt-nested-unused ---
+--- inline-alignpt-nested-unused paged ---
 #set page(width: auto)
 #let A = { align-point("A"); [A] }
 #let B = { align-point("B"); [B] }
