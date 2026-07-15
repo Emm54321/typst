@@ -107,13 +107,13 @@ impl AlignmentEngine {
             nodes.push(Node {
                 ty: NodeType::ZoneSeparator(k),
                 position: Abs::zero(),
-                edges: Default::default(),
+                edges: HashMap::default(),
             });
             groups.push(GroupInfo::new(k));
         }
         requirements.resize_with(zones + 1, Default::default);
         let mut r = Self {
-            id_to_node: Default::default(),
+            id_to_node: HashMap::default(),
             nodes,
             requirements,
             groups,
@@ -158,14 +158,14 @@ impl AlignmentEngine {
                 self.nodes.push(Node {
                     ty: NodeType::AlignPoint(id.clone()),
                     position: Abs::zero(),
-                    edges: Default::default(),
+                    edges: HashMap::default(),
                 });
                 self.groups.push(GroupInfo {
                     parent: k,
                     depth: 0,
                     extra_space: Abs::inf(),
                 });
-                self.requirements.push(Default::default());
+                self.requirements.push(HashSet::default());
                 k
             }
         };
@@ -399,7 +399,7 @@ impl AlignmentEngine {
             }
             let w = self.nodes[self.nodes.len() - self.id_to_node.len() - 1].position;
             for node in &mut self.nodes {
-                node.position = w - node.position
+                node.position = w - node.position;
             }
         }
         AlignmentInfos {

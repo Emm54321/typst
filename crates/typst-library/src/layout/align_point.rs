@@ -165,7 +165,7 @@ impl AlignPoints {
     /// Move all align points by an offset.
     pub fn translate(&mut self, offset: Point) {
         if !offset.is_zero() {
-            for (position, ..) in self.points.iter_mut() {
+            for (position, ..) in &mut self.points {
                 *position += offset;
             }
         }

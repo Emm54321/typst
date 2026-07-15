@@ -559,7 +559,7 @@ pub fn commit(
 
     // Build the frames and determine the height and baseline.
     let mut frames = vec![];
-    let mut align_points: HashMap<AlignPointId, (Abs, bool, bool)> = Default::default();
+    let mut align_points: HashMap<AlignPointId, (Abs, bool, bool)> = HashMap::default();
     let mut align_engine = AlignmentEngine::new(1, false);
     let baseline_point = AlignPointId::unique();
     align_engine.add_point(&baseline_point, 0..1, Abs::zero(), Abs::zero());
