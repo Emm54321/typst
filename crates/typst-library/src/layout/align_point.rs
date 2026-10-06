@@ -52,7 +52,7 @@ impl std::fmt::Debug for AlignPointId {
 // - priority
 // - some kind of scope
 // - some single use flag
-#[elem]
+#[elem(since = "0.16.0")] //TODO: set since.
 pub struct AlignPointElem {
     /// The name of the align point.
     #[positional]
