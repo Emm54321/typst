@@ -44,7 +44,7 @@ impl Frame {
             baseline: None,
             items: Arc::new(LazyHash::new(vec![])),
             kind,
-            align_points: Default::default(),
+            align_points: AlignPoints::default(),
         }
     }
 
